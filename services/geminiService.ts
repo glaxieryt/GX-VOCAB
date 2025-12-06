@@ -1,18 +1,8 @@
-
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion } from '../types';
 import { allWords } from '../data';
 
-// Helper to safely get API key without crashing if process is undefined (common in pure browser builds)
-const getApiKey = () => {
-  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-      return process.env.API_KEY;
-  }
-  // Fallback for Vite environments if injected via import.meta
-  return undefined;
-};
-
-const apiKey = getApiKey();
+const apiKey = process.env.API_KEY;
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 // Helper to timeout a promise
