@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Word } from '../types';
-import { getEasyMeaning, getSentence, pronounceWord } from '../services/geminiService';
+import { getEasyMeaning, getSentence, speakText } from '../services/geminiService';
 import Button from './Button';
 
 interface WordCardProps {
@@ -41,7 +41,7 @@ const WordCard: React.FC<WordCardProps> = ({ word }) => {
 
   const handlePronounce = (e: React.MouseEvent) => {
       e.stopPropagation();
-      pronounceWord(word.term);
+      speakText(word.term);
   };
 
   React.useEffect(() => {

@@ -84,12 +84,10 @@ async function decodeAudioData(
   return buffer;
 }
 
-export const pronounceWord = async (text: string) => {
+export const speakText = async (text: string) => {
     // 1. Browser Native Fallback (Offline or No Key)
     if (!ai) {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        window.speechSynthesis.speak(utterance);
+        speakNative(text);
         return;
     }
 
@@ -102,8 +100,15 @@ export const pronounceWord = async (text: string) => {
             await audioContext.resume();
         }
 
-        const prompt = `Say the word: ${text}`;
+        // Clean HTML tags for pronunciation
+        const cleanText = text.replace(/<[^>]*>/g, '');
         
+        // Adjust prompt based on whether it is a single word or a sentence
+        const isSentence = cleanText.trim().includes(' ');
+        const prompt = isSentence 
+            ? `Read the following sentence naturally, with a soft and soothing tone: "${cleanText}"`
+            : `Say the word: ${cleanText}`;
+
         const response = await withTimeout<GenerateContentResponse>(
             ai.models.generateContent({
                 model: 'gemini-2.5-flash-preview-tts',
@@ -112,7 +117,7 @@ export const pronounceWord = async (text: string) => {
                     responseModalities: [Modality.AUDIO],
                     speechConfig: {
                         voiceConfig: {
-                            prebuiltVoiceConfig: { voiceName: 'Kore' },
+                            prebuiltVoiceConfig: { voiceName: 'Kore' }, // Kore is typically the female voice
                         },
                     },
                 },
@@ -138,11 +143,31 @@ export const pronounceWord = async (text: string) => {
 
     } catch (error) {
         console.error("Gemini TTS Failed, falling back to browser:", error);
-        // Fallback to browser TTS if API fails
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        window.speechSynthesis.speak(utterance);
+        speakNative(text);
     }
+};
+
+// Fallback to browser speech
+const speakNative = (text: string) => {
+    const cleanText = text.replace(/<[^>]*>/g, '');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'en-US';
+    
+    // Try to find a female voice or a "Google" voice which is often higher quality
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(v => 
+        (v.name.includes('Female') || v.name.includes('Google US English')) && v.lang.startsWith('en')
+    );
+    
+    if (preferredVoice) {
+        utterance.voice = preferredVoice;
+    }
+    
+    // Make it slightly softer/slower if possible
+    utterance.rate = 0.9;
+    utterance.pitch = 1.1; 
+
+    window.speechSynthesis.speak(utterance);
 };
 
 

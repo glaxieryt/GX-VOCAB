@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Word, Lesson, LearningQuestion, LearningOption } from '../types';
-import { generateLessonContent, generateReviewQuestion, pronounceWord } from '../services/geminiService';
+import { generateLessonContent, generateReviewQuestion, speakText } from '../services/geminiService';
+import { playSuccessSound, playErrorSound } from '../services/audioService';
 import { allWords } from '../data';
 import Button from './Button';
 
@@ -12,8 +13,8 @@ interface GuidedLearningProps {
   onExit: () => void;
 }
 
-const SpeakerIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8">
+const SpeakerIcon = ({ large = false }: { large?: boolean }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={large ? "w-8 h-8" : "w-5 h-5"}>
       <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318 0-2.402.084C2.022 7.667 2 7.787 2 7.917v8.166c0 .13.022.25.106.333.084.084 1.261.084 2.402.084h1.932l4.5 4.5c.945.945 2.56.276 2.56-1.06V4.06zM18.53 12a4.48 4.48 0 00-1.782-3.582c-.39-.292-.936-.217-1.228.172-.292.39-.217.936.172 1.228a2.482 2.482 0 01.988 1.982c0 .822-.39 1.562-.988 2.182-.389.292-.464.838-.172 1.228.292.39.838.464 1.228.172A4.48 4.48 0 0018.53 12z" />
       <path d="M20.94 12c0-3.308-1.838-6.184-4.57-7.653-.408-.22-.916-.07-1.135.337-.22.407-.07.915.337 1.135 2.162 1.162 3.618 3.44 3.618 6.181 0 2.74-1.456 5.02-3.618 6.181-.407.22-.557.728-.337 1.135.22.407.727.557 1.135.337 2.732-1.469 4.57-4.345 4.57-7.653z" />
     </svg>
@@ -103,11 +104,14 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
     const currentQ = lesson.queue[questionIdx];
     const option = currentQ.options.find(o => o.id === selectedOption);
     
-    if (option?.isCorrect) {
-        setIsCorrect(true);
-        // Play success sound logic here if desired
+    const correct = !!option?.isCorrect;
+    setIsCorrect(correct);
+    
+    // Play SFX
+    if (correct) {
+        playSuccessSound();
     } else {
-        setIsCorrect(false);
+        playErrorSound();
     }
     
     setIsChecked(true);
@@ -130,11 +134,9 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
     }
   };
 
-  const handlePronounce = (e: React.MouseEvent) => {
+  const handlePronounce = (e: React.MouseEvent, text: string) => {
     e.stopPropagation();
-    if (lesson?.targetWord) {
-        pronounceWord(lesson.targetWord.term);
-    }
+    speakText(text);
   };
 
   if (loading) {
@@ -173,21 +175,31 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
                   <div className="flex items-center justify-center gap-4">
                     <h1 className="text-6xl font-serif font-black tracking-tight">{lesson.targetWord.term}</h1>
                     <button 
-                        onClick={handlePronounce}
+                        onClick={(e) => handlePronounce(e, lesson.targetWord.term)}
                         className="p-2 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-black transition-colors"
+                        title="Pronounce Word"
                     >
-                        <SpeakerIcon />
+                        <SpeakerIcon large />
                     </button>
                   </div>
                   <p className="text-2xl text-zinc-600 font-light max-w-md mx-auto">{lesson.intro.definition}</p>
               </div>
 
-              <div className="bg-zinc-50 border border-zinc-200 p-8 mb-12 relative overflow-hidden">
+              <div className="bg-zinc-50 border border-zinc-200 p-8 mb-12 relative overflow-hidden group">
                   <div className="absolute top-0 left-0 w-1 h-full bg-black"></div>
-                  <p 
-                    className="text-xl italic text-zinc-800 font-serif leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: `"${lesson.intro.exampleSentence}"` }}
-                  />
+                  <div className="flex justify-between items-start gap-4">
+                      <p 
+                        className="text-xl italic text-zinc-800 font-serif leading-relaxed"
+                        dangerouslySetInnerHTML={{ __html: `"${lesson.intro.exampleSentence}"` }}
+                      />
+                      <button 
+                         onClick={(e) => handlePronounce(e, lesson.intro.exampleSentence)}
+                         className="text-zinc-300 hover:text-black transition-colors"
+                         title="Read Sentence"
+                      >
+                          <SpeakerIcon />
+                      </button>
+                  </div>
               </div>
 
               <Button fullWidth onClick={() => setStep('QUIZ')} className="h-14 text-lg shadow-xl">
@@ -217,11 +229,18 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
                )}
                <h2 className="text-xl font-medium mb-6">{currentQ.questionText}</h2>
                
-               <div className="bg-zinc-50 border border-zinc-200 p-6 rounded-lg">
+               <div className="bg-zinc-50 border border-zinc-200 p-6 rounded-lg flex justify-between items-start gap-4">
                    <p 
                         className="text-2xl font-serif leading-relaxed text-zinc-900"
                         dangerouslySetInnerHTML={{ __html: currentQ.sentence }}
                    />
+                   <button 
+                        onClick={(e) => handlePronounce(e, currentQ.sentence)}
+                        className="text-zinc-300 hover:text-black transition-colors p-1"
+                        title="Read Question"
+                   >
+                       <SpeakerIcon />
+                   </button>
                </div>
           </div>
 
