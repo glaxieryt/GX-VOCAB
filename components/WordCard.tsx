@@ -1,12 +1,19 @@
 
 import React, { useState } from 'react';
 import { Word } from '../types';
-import { getEasyMeaning, getSentence } from '../services/geminiService';
+import { getEasyMeaning, getSentence, pronounceWord } from '../services/geminiService';
 import Button from './Button';
 
 interface WordCardProps {
   word: Word;
 }
+
+const SpeakerIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+    <path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318 0-2.402.084C2.022 7.667 2 7.787 2 7.917v8.166c0 .13.022.25.106.333.084.084 1.261.084 2.402.084h1.932l4.5 4.5c.945.945 2.56.276 2.56-1.06V4.06zM18.53 12a4.48 4.48 0 00-1.782-3.582c-.39-.292-.936-.217-1.228.172-.292.39-.217.936.172 1.228a2.482 2.482 0 01.988 1.982c0 .822-.39 1.562-.988 2.182-.389.292-.464.838-.172 1.228.292.39.838.464 1.228.172A4.48 4.48 0 0018.53 12z" />
+    <path d="M20.94 12c0-3.308-1.838-6.184-4.57-7.653-.408-.22-.916-.07-1.135.337-.22.407-.07.915.337 1.135 2.162 1.162 3.618 3.44 3.618 6.181 0 2.74-1.456 5.02-3.618 6.181-.407.22-.557.728-.337 1.135.22.407.727.557 1.135.337 2.732-1.469 4.57-4.345 4.57-7.653z" />
+  </svg>
+);
 
 const WordCard: React.FC<WordCardProps> = ({ word }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -32,10 +39,11 @@ const WordCard: React.FC<WordCardProps> = ({ word }) => {
       setLoadingSentence(false);
   }
 
-  // Auto fetch sentence on open if missing? Maybe better to let user click or just fetch.
-  // Let's adding a "Show Sentence" button if missing, or fetch automatically if desired.
-  // User asked for "add a simple sentence... under each word".
-  // To make it feel seamless, we can try to fetch on open if we have an API key.
+  const handlePronounce = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      pronounceWord(word.term);
+  };
+
   React.useEffect(() => {
       if (isOpen && !word.sentence && !generatedSentence && !loadingSentence) {
           handleFetchSentence();
@@ -53,9 +61,18 @@ const WordCard: React.FC<WordCardProps> = ({ word }) => {
         onClick={() => setIsOpen(!isOpen)}
       >
         <div className="flex flex-col">
-            <h3 className="text-xl font-bold font-serif tracking-tight group-hover:underline decoration-1 underline-offset-4">
-            {word.term}
-            </h3>
+            <div className="flex items-center gap-3">
+              <h3 className="text-xl font-bold font-serif tracking-tight group-hover:underline decoration-1 underline-offset-4">
+              {word.term}
+              </h3>
+              <button 
+                onClick={handlePronounce}
+                className="text-zinc-400 hover:text-black transition-colors p-1 rounded-full hover:bg-zinc-200"
+                title="Pronounce"
+              >
+                 <SpeakerIcon />
+              </button>
+            </div>
             {/* Show category tag if open */}
             {isOpen && word.category && (
                 <span className="text-[10px] uppercase font-bold text-zinc-400 mt-1 tracking-wider">{word.category}</span>

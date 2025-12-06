@@ -34,10 +34,13 @@ export const generateQuiz = (words: Word[]): QuizQuestion[] => {
     }
 
     const options = [...distractors, correctAnswer];
-    // Fisher-Yates shuffle
+    
+    // Robust Fisher-Yates shuffle using temporary variable
     for (let i = options.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [options[i], options[j]] = [options[j], options[i]];
+      const temp = options[i];
+      options[i] = options[j];
+      options[j] = temp;
     }
 
     let questionText = "";

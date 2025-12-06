@@ -1,7 +1,9 @@
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+
+import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion } from '../types';
 import { allWords } from '../data';
 
+// Safe API Key access
 const apiKey = process.env.API_KEY;
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
@@ -16,6 +18,17 @@ const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
             (error) => { clearTimeout(timer); reject(error); }
         );
     });
+};
+
+// Helper to shuffle array in place
+const shuffleArray = (array: any[]) => {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = array[i];
+        array[i] = array[j];
+        array[j] = temp;
+    }
+    return array;
 };
 
 // --- Helper for Underlining ---
@@ -36,6 +49,102 @@ const highlightWord = (text: string, term: string): string => {
         return text;
     }
 };
+
+// --- Audio Handling ---
+
+let audioContext: AudioContext | null = null;
+
+function decode(base64: string) {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      // Convert PCM 16-bit to Float32 (-1.0 to 1.0)
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
+
+export const pronounceWord = async (text: string) => {
+    // 1. Browser Native Fallback (Offline or No Key)
+    if (!ai) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        window.speechSynthesis.speak(utterance);
+        return;
+    }
+
+    try {
+        // Initialize Audio Context on user gesture
+        if (!audioContext) {
+             audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
+        }
+        if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
+
+        const prompt = `Say the word: ${text}`;
+        
+        const response = await withTimeout<GenerateContentResponse>(
+            ai.models.generateContent({
+                model: 'gemini-2.5-flash-preview-tts',
+                contents: [{ parts: [{ text: prompt }] }],
+                config: {
+                    responseModalities: [Modality.AUDIO],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: 'Kore' },
+                        },
+                    },
+                },
+            }),
+            5000 
+        );
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        
+        if (!base64Audio) throw new Error("No audio data received");
+
+        const audioBuffer = await decodeAudioData(
+            decode(base64Audio),
+            audioContext,
+            24000,
+            1
+        );
+
+        const source = audioContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioContext.destination);
+        source.start();
+
+    } catch (error) {
+        console.error("Gemini TTS Failed, falling back to browser:", error);
+        // Fallback to browser TTS if API fails
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        window.speechSynthesis.speak(utterance);
+    }
+};
+
 
 export const getEasyMeaning = async (word: string, meaning: string): Promise<string> => {
   if (!ai) return "Meaning not available (Offline).";
@@ -112,11 +221,7 @@ export const generateContextQuizQuestion = async (word: Word, distractors: strin
         sentence = highlightWord(sentence, word.term);
 
         const options = [...distractors, word.meaning];
-        // Shuffle
-        for (let i = options.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [options[i], options[j]] = [options[j], options[i]];
-        }
+        shuffleArray(options);
 
         return {
             id: `q_${word.id}_context_gen`,
@@ -186,11 +291,7 @@ export const generateLessonContent = async (word: Word, previousWords: Word[] = 
             { id: 'opt_w3', text: q.wrongMeaning3, isCorrect: false },
         ];
         
-        // Shuffle options
-        for (let i = opts.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [opts[i], opts[j]] = [opts[j], opts[i]];
-        }
+        shuffleArray(opts);
 
         return {
             id: `leq_${word.id}_${idx}`,
@@ -242,8 +343,8 @@ export const generateReviewQuestion = async (word: Word): Promise<LearningQuesti
             { id: 'w2', text: d.distractor2 || "Wrong 2", isCorrect: false },
             { id: 'w3', text: d.distractor3 || "Wrong 3", isCorrect: false }
         ];
-        // Shuffle
-        opts.sort(() => Math.random() - 0.5);
+        
+        shuffleArray(opts);
         
         return {
             id: `rev_${word.id}_${Date.now()}`,
@@ -271,7 +372,9 @@ const generateFallbackLesson = (word: Word): Lesson => {
         const opts = [
             { id: 'c', text: word.meaning, isCorrect: true },
             ...distractors.map((d, i) => ({ id: `w${i}`, text: d, isCorrect: false }))
-        ].sort(() => Math.random() - 0.5);
+        ];
+        
+        shuffleArray(opts);
 
         return {
             id: `fb_${word.id}_${idx}`,
@@ -302,7 +405,9 @@ const generateFallbackReview = (word: Word): LearningQuestion => {
      const opts = [
          { id: 'c', text: word.meaning, isCorrect: true },
          ...distractors.map((d, i) => ({ id: `w${i}`, text: d, isCorrect: false }))
-     ].sort(() => Math.random() - 0.5);
+     ];
+     
+     shuffleArray(opts);
 
      return {
          id: `rev_fb_${word.id}`,
