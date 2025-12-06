@@ -61,14 +61,14 @@ export const signUp = async (username: string, password: string, isPublic: boole
             if (existing && existing.length > 0) throw "Username already taken.";
 
             // Create
+            // REMOVED srs_state from here to prevent "Column not found" error if DB schema isn't updated
             const newUser = {
                 username: cleanUser,
                 password: password,
                 learning_index: 0,
                 learned_words: [],
                 mistakes: {},
-                is_public: isPublic,
-                srs_state: {} 
+                is_public: isPublic
             };
 
             const createRes = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
@@ -133,7 +133,7 @@ export const signIn = async (username: string, password: string): Promise<UserPr
 
             const users = await res.json();
             
-            if (!users || users.length === 0) throw "User not found.";
+            if (!users || users.length === 0) throw "User not found. Please sign up first.";
             
             const user = users[0];
             if (user.password !== password) throw "Invalid password.";
@@ -290,12 +290,14 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
 export const saveSRSState = async (username: string, srsState: Record<string, any>) => {
     if (hasSupabase) {
         try {
+            // We still try to patch srs_state here. If column is missing, this request might 400,
+            // but it won't block the main app flow since it's caught.
             await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
                 method: 'PATCH',
                 headers: apiHeaders,
                 body: JSON.stringify({ srs_state: srsState })
             });
-        } catch (e) { console.error("SRS Sync failed", e); }
+        } catch (e) { console.error("SRS Sync failed (Column likely missing)", e); }
     } else {
         const db = getLocalDB();
         if(db[username]) {
