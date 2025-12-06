@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { WordGroup, AppView, UserProfile } from './types';
 import { getGroupedData, allWords } from './data';
@@ -104,6 +105,29 @@ const App: React.FC = () => {
       setView(AppView.GUIDED_LEARNING);
   };
 
+  // Logic to start Full Revision
+  const handleStartRevision = () => {
+      if (!user || !user.learnedWords || user.learnedWords.length === 0) {
+          alert("You haven't learned any words yet! Complete some daily lessons first.");
+          return;
+      }
+
+      // Filter words that the user has learned
+      const learnedObjects = allWords.filter(w => user.learnedWords.includes(w.id));
+      
+      // Shuffle them for better practice
+      const shuffled = [...learnedObjects].sort(() => Math.random() - 0.5);
+
+      const revisionGroup: WordGroup = {
+          id: 'full_revision',
+          label: 'Comprehensive Revision',
+          words: shuffled
+      };
+
+      setSelectedGroup(revisionGroup);
+      setView(AppView.QUIZ_MODE);
+  };
+
   const handleGroupSelect = (group: WordGroup) => {
     setSelectedGroup(group);
     if (view === AppView.GROUP_SELECT_LEARN) {
@@ -199,51 +223,91 @@ const App: React.FC = () => {
   const renderHome = () => {
     const totalWords = allWords?.length || 1500;
     const progressPercent = Math.min(((learningIndex || 0) / totalWords) * 100, 100);
+    const wordsLearnedCount = learnedWords?.length || 0;
 
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-12 animate-fadeIn pb-12">
         <div className="text-center space-y-4 px-4">
-          <h2 className="text-5xl md:text-8xl font-serif font-medium tracking-tight text-black dark:text-white">Master Words</h2>
+          <h2 className="text-5xl md:text-8xl font-serif font-medium tracking-tight text-black dark:text-white">Master English</h2>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-md mx-auto text-lg font-light">
-            Expand your vocabulary with grouped learning and AI-assisted mnemonics.
+            Your personalized journey to 1500 advanced vocabulary words.
           </p>
         </div>
         
-        {/* Daily Lesson Card */}
-        <div className="w-full max-w-md border border-black dark:border-zinc-700 p-6 bg-zinc-50 dark:bg-zinc-900 shadow-lg relative overflow-hidden group cursor-pointer transition-transform hover:-translate-y-1 rounded-sm" onClick={handleStartGuided}>
-            <div className="absolute top-0 right-0 bg-black dark:bg-white text-white dark:text-black px-3 py-1 text-[10px] font-bold uppercase tracking-widest">
-                Guided Path
-            </div>
-            <h3 className="text-2xl font-bold font-serif mb-2 text-black dark:text-white">
-                {learningIndex > 0 ? "Continue Learning" : "Start Daily Lesson"}
-            </h3>
-            <p className="text-zinc-500 dark:text-zinc-400 mb-6 text-sm">Progressive difficulty with spaced repetition.</p>
-            
-            <div className="flex justify-between text-xs font-bold uppercase tracking-widest mb-2 text-zinc-400 dark:text-zinc-500">
-                <span>Progress</span>
-                <span>{learningIndex} / {totalWords}</span>
-            </div>
-            <div className="h-2 bg-zinc-200 dark:bg-zinc-800 w-full rounded-full overflow-hidden">
-                <div 
-                    className="h-full bg-black dark:bg-white transition-all duration-1000 ease-out" 
-                    style={{ width: `${progressPercent}%` }} 
-                />
-            </div>
-            <div className="mt-6 flex justify-between items-end">
-                {learningIndex > 0 ? (
-                    <button 
-                      onClick={handleResetProgress}
-                      className="text-xs text-zinc-400 hover:text-red-600 dark:hover:text-red-400 font-bold uppercase tracking-widest z-10 transition-colors"
-                    >
-                      Reset Progress
-                    </button>
-                ) : (
-                    <div></div> 
-                )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl">
+            {/* Daily Lesson Card */}
+            <div className="border border-black dark:border-zinc-700 p-6 bg-zinc-50 dark:bg-zinc-900 shadow-lg relative overflow-hidden group cursor-pointer transition-transform hover:-translate-y-1 rounded-sm flex flex-col justify-between h-64" onClick={handleStartGuided}>
+                <div>
+                    <div className="absolute top-0 right-0 bg-black dark:bg-white text-white dark:text-black px-3 py-1 text-[10px] font-bold uppercase tracking-widest">
+                        Guided Path
+                    </div>
+                    <h3 className="text-2xl font-bold font-serif mb-2 text-black dark:text-white">
+                        {learningIndex > 0 ? "Continue Lesson" : "Start Lesson"}
+                    </h3>
+                    <p className="text-zinc-500 dark:text-zinc-400 text-sm">Progressive difficulty with spaced repetition.</p>
+                </div>
                 
-                <span className="text-sm font-bold border-b-2 border-black dark:border-white pb-0.5 group-hover:bg-black dark:group-hover:bg-white group-hover:text-white dark:group-hover:text-black transition-colors duration-200 px-1 ml-auto text-black dark:text-white">
-                   {learningIndex > 0 ? "Continue Lesson →" : "Start Learning →"}
-                </span>
+                <div>
+                    <div className="flex justify-between text-xs font-bold uppercase tracking-widest mb-2 text-zinc-400 dark:text-zinc-500">
+                        <span>Progress</span>
+                        <span>{learningIndex} / {totalWords}</span>
+                    </div>
+                    <div className="h-2 bg-zinc-200 dark:bg-zinc-800 w-full rounded-full overflow-hidden mb-4">
+                        <div 
+                            className="h-full bg-black dark:bg-white transition-all duration-1000 ease-out" 
+                            style={{ width: `${progressPercent}%` }} 
+                        />
+                    </div>
+                    
+                    <div className="flex justify-between items-end">
+                        {learningIndex > 0 ? (
+                            <button 
+                            onClick={handleResetProgress}
+                            className="text-[10px] text-zinc-400 hover:text-red-600 dark:hover:text-red-400 font-bold uppercase tracking-widest z-10 transition-colors"
+                            >
+                            Reset
+                            </button>
+                        ) : <span></span>}
+                        <span className="text-sm font-bold border-b-2 border-black dark:border-white pb-0.5 group-hover:bg-black dark:group-hover:bg-white group-hover:text-white dark:group-hover:text-black transition-colors duration-200 px-1 text-black dark:text-white">
+                        {learningIndex > 0 ? "Resume →" : "Start →"}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Revision Card */}
+            <div 
+                className={`border border-zinc-200 dark:border-zinc-800 p-6 bg-white dark:bg-zinc-950 shadow-md relative overflow-hidden group transition-transform rounded-sm flex flex-col justify-between h-64 ${wordsLearnedCount > 0 ? 'cursor-pointer hover:-translate-y-1 hover:border-black dark:hover:border-white' : 'opacity-60 cursor-not-allowed'}`} 
+                onClick={wordsLearnedCount > 0 ? handleStartRevision : undefined}
+            >
+                <div>
+                    <div className="absolute top-0 right-0 bg-zinc-200 dark:bg-zinc-800 text-black dark:text-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest">
+                        Revision
+                    </div>
+                    <h3 className="text-2xl font-bold font-serif mb-2 text-black dark:text-white">
+                        Full Review
+                    </h3>
+                    <p className="text-zinc-500 dark:text-zinc-400 text-sm">
+                        Test yourself on all {wordsLearnedCount} words you have learned so far.
+                    </p>
+                </div>
+                
+                <div>
+                    <div className="flex items-center gap-3 mb-4">
+                         <div className="text-4xl font-serif font-black text-black dark:text-white">
+                             {wordsLearnedCount}
+                         </div>
+                         <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 leading-tight">
+                             Words<br/>Learned
+                         </div>
+                    </div>
+
+                    <div className="flex justify-end items-end">
+                        <span className="text-sm font-bold border-b-2 border-zinc-300 dark:border-zinc-700 pb-0.5 group-hover:bg-black dark:group-hover:bg-white group-hover:text-white dark:group-hover:text-black transition-colors duration-200 px-1 text-zinc-600 dark:text-zinc-300">
+                        {wordsLearnedCount > 0 ? "Start Revision →" : "Learn words first"}
+                        </span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -258,7 +322,7 @@ const App: React.FC = () => {
             Browse Groups
           </Button>
           <Button onClick={handleStartTest} variant="outline" fullWidth>
-            Take a Test
+            Quick Test
           </Button>
         </div>
       </div>
@@ -334,8 +398,8 @@ const App: React.FC = () => {
             You got {quizResult.score} out of {quizResult.total} correct.
           </p>
           <div className="flex gap-4 flex-col md:flex-row">
-            <Button onClick={() => setView(AppView.GROUP_SELECT_QUIZ)} variant="outline">
-              Choose Another Group
+            <Button onClick={() => setView(AppView.HOME)} variant="outline">
+              Return Home
             </Button>
             <Button onClick={() => {
               setQuizResult(null); 
@@ -352,7 +416,7 @@ const App: React.FC = () => {
         key={selectedGroup?.id} 
         group={selectedGroup!} 
         onFinish={handleQuizFinish}
-        onExit={() => setView(AppView.GROUP_SELECT_QUIZ)}
+        onExit={() => setView(AppView.HOME)}
       />
     );
   };
