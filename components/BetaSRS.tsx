@@ -1,14 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { allWords } from '../data';
-import { Word, SRSState, RichVocabularyCard, Exercise } from '../types';
+import { Word, SRSState, RichVocabularyCard } from '../types';
 import { generateRichVocabularyData, generateWordImage, speakText } from '../services/geminiService';
 import { saveSRSState, getSRSState, getCurrentSession } from '../services/authService';
 import { playSuccessSound, playErrorSound } from '../services/audioService';
 import Button from './Button';
 
 // --- Phases ---
-type Phase = 'DASHBOARD' | 'LOADING' | 'PHASE1_ENCODING' | 'PHASE2_EXERCISES' | 'PHASE3_CONFIDENCE' | 'SESSION_COMPLETE';
+type Phase = 'DASHBOARD' | 'LOADING' | 'PHASE1_ENCODING' | 'PHASE2_EXERCISES' | 'PHASE3_CONFIDENCE' | 'PHASE4_SUMMARY' | 'SESSION_COMPLETE';
 
 const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     // Session State
@@ -154,7 +154,7 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         }
     };
 
-    // --- PHASE 3: SM-2 ALGORITHM ---
+    // --- PHASE 3: SM-2 ALGORITHM & SAVE ---
     const handleConfidence = (rating: number) => {
         const wordId = queue[queueIndex].id;
         const currentSRS = (srsState as any)[wordId] || { interval: 0, nextReview: 0, easeFactor: 2.5, streak: 0 };
@@ -185,7 +185,12 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         if (user) saveSRSState(user, newState);
         else localStorage.setItem('gx_beta_srs', JSON.stringify(newState));
 
-        // Next Word
+        // INSTEAD of jumping to next word, go to Summary Phase
+        setPhase('PHASE4_SUMMARY');
+    };
+
+    // --- PHASE 4: CONTINUE OR EXIT ---
+    const handleContinue = () => {
         if (queueIndex < queue.length - 1) {
             setQueueIndex(prev => prev + 1);
             loadWordData(queue[queueIndex + 1]);
@@ -193,6 +198,19 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
             setPhase('SESSION_COMPLETE');
         }
     };
+
+    // --- HELPER COMPONENTS ---
+    const SessionHeader = () => (
+        <div className="flex justify-between items-center mb-6 px-1">
+            <Button variant="secondary" onClick={onExit} className="px-3 py-1.5 h-auto text-xs flex items-center gap-1">
+                <span>←</span> Exit Lesson
+            </Button>
+            <div className="flex flex-col items-end">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Session Progress</span>
+                <span className="text-xs font-bold text-black dark:text-white">{queueIndex + 1} / {queue.length}</span>
+            </div>
+        </div>
+    );
 
     // --- RENDERERS ---
 
@@ -208,7 +226,7 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                 <div className="w-full max-w-4xl">
                     <div className="flex justify-between items-center mb-12">
                          <h1 className="text-3xl font-black font-serif dark:text-white">Advanced Learning System</h1>
-                         <button onClick={onExit} className="text-sm underline text-zinc-500">Exit Beta</button>
+                         <button onClick={onExit} className="text-sm underline text-zinc-500 hover:text-black dark:hover:text-white transition-colors">Exit Beta</button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
@@ -245,9 +263,10 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     if (phase === 'LOADING') {
         return (
             <div className="min-h-screen flex items-center justify-center flex-col bg-zinc-50 dark:bg-zinc-950">
-                <div className="w-16 h-16 border-4 border-t-blue-500 border-zinc-200 rounded-full animate-spin mb-6"></div>
+                <div className="w-16 h-16 border-4 border-t-blue-500 border-zinc-200 dark:border-zinc-800 rounded-full animate-spin mb-6"></div>
                 <h2 className="text-xl font-serif font-bold text-zinc-800 dark:text-zinc-200">Generating Rich Content...</h2>
                 <p className="text-sm text-zinc-500 mt-2">Consulting cognitive science engine</p>
+                <button onClick={onExit} className="mt-8 text-xs underline text-zinc-400">Cancel</button>
             </div>
         );
     }
@@ -257,7 +276,7 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
              <div className="min-h-screen flex items-center justify-center flex-col bg-zinc-50 dark:bg-zinc-950 p-4 text-center">
                  <h1 className="text-6xl mb-6">🎉</h1>
                  <h2 className="text-4xl font-serif font-bold text-black dark:text-white mb-4">Session Complete</h2>
-                 <p className="text-zinc-600 dark:text-zinc-400 mb-8">Accuracy: {Math.round((sessionStats.correct/sessionStats.total)*100)}%</p>
+                 <p className="text-zinc-600 dark:text-zinc-400 mb-8">Accuracy: {sessionStats.total > 0 ? Math.round((sessionStats.correct/sessionStats.total)*100) : 0}%</p>
                  <button onClick={onExit} className="bg-black dark:bg-white text-white dark:text-black py-3 px-8 rounded-full font-bold">Return Home</button>
              </div>
          );
@@ -265,23 +284,25 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
 
     if (!currentCard) return null;
 
-    // --- PHASE 1 RENDER ---
+    // --- PHASE 1 RENDER: ENCODING ---
     if (phase === 'PHASE1_ENCODING') {
         return (
-            <div className="min-h-screen bg-[#F7F9FC] dark:bg-zinc-950 p-6 flex flex-col">
+            <div className="min-h-screen bg-[#F7F9FC] dark:bg-zinc-950 p-4 md:p-6 flex flex-col">
                 <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col">
+                    <SessionHeader />
+                    
                     <div className="flex justify-between items-center mb-6">
                          <span className="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full">INITIAL ENCODING</span>
                          <span className="text-sm font-mono text-zinc-400">Timer: {timeLeft}s</span>
                     </div>
 
-                    <div className="bg-white dark:bg-zinc-900 p-8 rounded-3xl shadow-xl border border-zinc-200 dark:border-zinc-800 flex-1 overflow-y-auto">
+                    <div className="bg-white dark:bg-zinc-900 p-6 md:p-8 rounded-3xl shadow-xl border border-zinc-200 dark:border-zinc-800 flex-1 overflow-y-auto">
                         {/* Word Header */}
                         <div className="text-center mb-10 pb-8 border-b border-zinc-100 dark:border-zinc-800">
-                            <h1 className="text-6xl font-black text-black dark:text-white mb-4 tracking-tight">{currentCard.word}</h1>
+                            <h1 className="text-5xl md:text-6xl font-black text-black dark:text-white mb-4 tracking-tight">{currentCard.word}</h1>
                             <div className="flex items-center justify-center gap-4 text-zinc-500">
                                 <span className="font-mono text-lg">{currentCard.pronunciation.ipa}</span>
-                                <button onClick={() => speakText(currentCard.word)} className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-full hover:bg-zinc-200">🔊</button>
+                                <button onClick={() => speakText(currentCard.word)} className="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-full hover:bg-zinc-200 transition-colors">🔊</button>
                             </div>
                             <div className="mt-4 flex gap-2 justify-center">
                                 <span className="text-xs uppercase font-bold tracking-widest text-zinc-400">{currentCard.metadata.partOfSpeech}</span>
@@ -342,40 +363,42 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         );
     }
 
-    // --- PHASE 2 RENDER ---
+    // --- PHASE 2 RENDER: EXERCISES ---
     const currentEx = currentCard.exercises[currentExerciseIdx];
     
     if (phase === 'PHASE2_EXERCISES' && currentEx) {
         return (
-            <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 flex flex-col items-center">
+            <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-6 flex flex-col items-center">
                  <div className="max-w-2xl w-full flex-1 flex flex-col">
+                      <SessionHeader />
+
                       {/* Progress Header */}
                       <div className="mb-8">
                           <div className="flex justify-between text-xs font-bold uppercase text-zinc-400 mb-2">
                               <span>Exercise {currentExerciseIdx + 1} / {currentCard.exercises.length}</span>
                               <span>{currentEx.type.replace('_', ' ')}</span>
                           </div>
-                          <div className="h-2 bg-zinc-200 rounded-full overflow-hidden">
+                          <div className="h-2 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
                               <div className="h-full bg-black dark:bg-white transition-all duration-500" style={{ width: `${((currentExerciseIdx)/currentCard.exercises.length)*100}%` }}></div>
                           </div>
                       </div>
 
                       {/* Question Card */}
                       <div className="bg-white dark:bg-zinc-900 p-8 rounded-3xl shadow-lg border border-zinc-200 dark:border-zinc-800 flex-1 flex flex-col justify-center">
-                           <h2 className="text-2xl font-serif font-bold text-center mb-8 dark:text-white">
+                           <h2 className="text-2xl font-serif font-bold text-center mb-8 dark:text-white leading-tight">
                                {currentEx.question || currentEx.definition || currentEx.instruction}
                            </h2>
 
                            {currentEx.options ? (
                                <div className="space-y-3">
                                    {currentEx.options.map((opt, i) => {
-                                       let style = "bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 hover:border-black dark:hover:border-white";
+                                       let style = "bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 hover:border-black dark:hover:border-white text-black dark:text-white";
                                        if (feedback !== 'IDLE') {
-                                           if (opt.correct) style = "bg-green-100 border-green-500 text-green-800";
-                                           else if (i === selectedOption) style = "bg-red-100 border-red-500 text-red-800";
-                                           else style = "opacity-50";
+                                           if (opt.correct) style = "bg-green-100 border-green-500 text-green-800 dark:bg-green-900 dark:text-green-100 dark:border-green-500";
+                                           else if (i === selectedOption) style = "bg-red-100 border-red-500 text-red-800 dark:bg-red-900 dark:text-red-100 dark:border-red-500";
+                                           else style = "opacity-50 dark:text-zinc-500";
                                        } else if (selectedOption === i) {
-                                           style = "border-black dark:border-white ring-1 ring-black";
+                                           style = "border-black dark:border-white ring-1 ring-black dark:ring-white bg-white dark:bg-zinc-700";
                                        }
 
                                        return (
@@ -409,7 +432,7 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
 
                            {/* Feedback Area */}
                            {feedback !== 'IDLE' && (
-                               <div className={`mt-8 p-4 rounded-xl text-center ${feedback === 'CORRECT' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                               <div className={`mt-8 p-4 rounded-xl text-center ${feedback === 'CORRECT' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
                                     <p className="font-bold mb-1">{feedback === 'CORRECT' ? currentEx.feedback?.correct || "Correct!" : currentEx.feedback?.incorrect || "Incorrect."}</p>
                                </div>
                            )}
@@ -431,36 +454,66 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         );
     }
 
-    // --- PHASE 3: CONFIDENCE ---
+    // --- PHASE 3 RENDER: CONFIDENCE ---
     if (phase === 'PHASE3_CONFIDENCE') {
         return (
             <div className="min-h-screen bg-white dark:bg-zinc-950 p-6 flex flex-col items-center justify-center">
-                 <div className="max-w-xl w-full text-center">
-                      <h2 className="text-3xl font-serif font-bold mb-2 dark:text-white">Self Assessment</h2>
-                      <p className="text-zinc-500 mb-10">How confident are you with "{queue[queueIndex].term}"?</p>
+                 <div className="max-w-xl w-full text-center flex-1 flex flex-col justify-center">
+                      <SessionHeader />
+                      
+                      <div className="flex-1 flex flex-col justify-center">
+                        <h2 className="text-3xl font-serif font-bold mb-2 dark:text-white">Self Assessment</h2>
+                        <p className="text-zinc-500 mb-10">How confident are you with "{currentCard.word}"?</p>
 
-                      <div className="space-y-3">
-                          {[
-                              { lvl: 5, label: "Mastery", sub: "I could teach this", days: 30 },
-                              { lvl: 4, label: "Confident", sub: "Can use in writing", days: 14 },
-                              { lvl: 3, label: "Moderate", sub: "Understand when seen", days: 7 },
-                              { lvl: 2, label: "Weak", sub: "Vaguely familiar", days: 3 },
-                              { lvl: 1, label: "Unfamiliar", sub: "Don't know it", days: 1 },
-                          ].map((opt) => (
-                              <button
-                                 key={opt.lvl}
-                                 onClick={() => handleConfidence(opt.lvl)}
-                                 className="w-full p-4 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-black dark:hover:border-white hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-all flex justify-between items-center group"
-                              >
-                                  <div className="text-left">
-                                      <span className="font-bold block text-black dark:text-white group-hover:translate-x-1 transition-transform">{opt.label}</span>
-                                      <span className="text-xs text-zinc-400">{opt.sub}</span>
-                                  </div>
-                                  <span className="text-xs font-bold bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded text-zinc-500">Next: {opt.days}d</span>
-                              </button>
-                          ))}
+                        <div className="space-y-3">
+                            {[
+                                { lvl: 5, label: "Mastery", sub: "I could teach this", days: 30 },
+                                { lvl: 4, label: "Confident", sub: "Can use in writing", days: 14 },
+                                { lvl: 3, label: "Moderate", sub: "Understand when seen", days: 7 },
+                                { lvl: 2, label: "Weak", sub: "Vaguely familiar", days: 3 },
+                                { lvl: 1, label: "Unfamiliar", sub: "Don't know it", days: 1 },
+                            ].map((opt) => (
+                                <button
+                                    key={opt.lvl}
+                                    onClick={() => handleConfidence(opt.lvl)}
+                                    className="w-full p-4 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-black dark:hover:border-white hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-all flex justify-between items-center group bg-white dark:bg-zinc-950"
+                                >
+                                    <div className="text-left">
+                                        <span className="font-bold block text-black dark:text-white group-hover:translate-x-1 transition-transform">{opt.label}</span>
+                                        <span className="text-xs text-zinc-400">{opt.sub}</span>
+                                    </div>
+                                    <span className="text-xs font-bold bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded text-zinc-500">Next: {opt.days}d</span>
+                                </button>
+                            ))}
+                        </div>
                       </div>
                  </div>
+            </div>
+        );
+    }
+
+    // --- PHASE 4 RENDER: WORD SUMMARY & CHOICE ---
+    if (phase === 'PHASE4_SUMMARY') {
+        return (
+            <div className="min-h-screen bg-green-50 dark:bg-zinc-950 p-6 flex flex-col items-center justify-center">
+                <div className="max-w-md w-full bg-white dark:bg-zinc-900 p-8 rounded-3xl shadow-xl border border-green-100 dark:border-zinc-800 text-center animate-popIn">
+                    <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-3xl mx-auto mb-6">
+                        ✅
+                    </div>
+                    <h2 className="text-3xl font-serif font-bold text-black dark:text-white mb-2">Word Saved!</h2>
+                    <p className="text-zinc-500 dark:text-zinc-400 mb-8">
+                        You've completed <strong>{currentCard.word}</strong>.
+                    </p>
+
+                    <div className="space-y-4">
+                        <Button fullWidth onClick={handleContinue} className="h-14 text-lg">
+                            Continue to Next Word →
+                        </Button>
+                        <Button fullWidth variant="secondary" onClick={onExit} className="h-14">
+                            Exit to Dashboard
+                        </Button>
+                    </div>
+                </div>
             </div>
         );
     }

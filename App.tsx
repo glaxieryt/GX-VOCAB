@@ -107,9 +107,15 @@ const App: React.FC = () => {
 
   const saveProgress = (index: number, learned: string[], addedXp: number = 0) => {
      if (user) {
-         const newTotalXp = (user.xp || 0) + addedXp;
-         saveUserProgress(user.username, index, learned, newTotalXp);
+         // Calculate new total safely
+         const currentXp = user.xp || 0;
+         const newTotalXp = currentXp + addedXp;
+         
+         // Update Local State immediately
          setUser(prev => prev ? ({ ...prev, xp: newTotalXp }) : null);
+         
+         // Persist to Database
+         saveUserProgress(user.username, index, learned, newTotalXp);
      }
   };
 
@@ -222,9 +228,9 @@ const App: React.FC = () => {
 
   const handleQuizFinish = (score: number, total: number) => {
     setQuizResult({ score, total });
-    // Award XP based on score (e.g., 1 XP per correct answer in standard quiz)
+    // Award 1 XP per correct answer in revision to prevent XP farming, but still reward effort
     if (score > 0) {
-        saveProgress(learningIndex, learnedWords, score);
+        saveProgress(learningIndex, learnedWords, score); 
     }
   };
 
@@ -308,14 +314,25 @@ const App: React.FC = () => {
                   </div>
               </div>
           </div>
+
+          {/* Leaderboard Button - Moved Here */}
+          <div className="w-full max-w-md animate-slideUp" style={{ animationDelay: '0.3s' }}>
+             <Button onClick={handleShowLeaderboard} variant="outline" fullWidth className="h-16 text-xl border-yellow-600/50 text-yellow-700 dark:text-yellow-500 hover:border-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/10 flex items-center justify-center gap-2">
+                <span>🏆</span> View Global Leaderboard
+             </Button>
+          </div>
       </div>
   );
   
   const renderLeaderboard = () => (
       <div className="max-w-2xl mx-auto animate-fadeIn pb-20 mt-12 border-t border-zinc-200 dark:border-zinc-800 pt-12">
-          <div className="mb-8 text-center">
-              <h2 className="text-4xl font-serif font-bold mb-2 text-black dark:text-white">Global Leaderboard</h2>
-              <p className="text-zinc-500 dark:text-zinc-400">Ranked by total Experience Points (XP)</p>
+          <div className="flex items-center justify-between mb-8">
+              <Button onClick={goSubjectSelection} variant="secondary" className="px-3 py-1.5 h-auto text-xs">← Back</Button>
+              <div className="text-center">
+                <h2 className="text-3xl font-serif font-bold mb-1 text-black dark:text-white">Global Leaderboard</h2>
+                <p className="text-zinc-500 dark:text-zinc-400 text-sm">Ranked by total Experience Points (XP)</p>
+              </div>
+              <div className="w-10"></div>
           </div>
 
           {loadingLeaderboard ? (
@@ -489,14 +506,6 @@ const App: React.FC = () => {
                </Button>
             </div>
         </div>
-
-        {/* Leaderboard Section */}
-        <div className="w-full max-w-3xl animate-slideUp" style={{ animationDelay: '0.3s' }}>
-             <Button onClick={handleShowLeaderboard} variant="outline" fullWidth className="h-16 text-xl border-yellow-600/50 text-yellow-700 dark:text-yellow-500 hover:border-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/10">
-                🏆 View Leaderboard
-             </Button>
-        </div>
-
       </div>
     );
   };
