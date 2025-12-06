@@ -245,3 +245,35 @@ export const recordMistake = async (username: string, wordId: string) => {
         }
     }
 };
+
+export const getLeaderboard = async (): Promise<{username: string, score: number}[]> => {
+    if (hasSupabase) {
+        try {
+            // Fetch top 100 users, sorted by learning_index desc, filtering out those with 0 score
+            const res = await fetch(`${SUPABASE_URL}/rest/v1/users?learning_index=gt.0&select=username,learning_index&order=learning_index.desc&limit=100`, {
+                method: 'GET', 
+                headers: apiHeaders
+            });
+            
+            if (!res.ok) throw "Failed to fetch leaderboard";
+            
+            const users = await res.json();
+            return users.map((u: any) => ({
+                username: u.username,
+                score: u.learning_index || 0
+            }));
+        } catch (e) {
+            console.error("Leaderboard error", e);
+            return [];
+        }
+    } else {
+        // Fallback for offline mode
+        const db = getLocalDB();
+        const users = Object.values(db).map((u: any) => ({
+            username: u.username,
+            score: u.learningIndex || 0
+        })).filter(u => u.score > 0);
+        
+        return users.sort((a, b) => b.score - a.score).slice(0, 100);
+    }
+};

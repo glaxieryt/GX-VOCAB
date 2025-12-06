@@ -21,6 +21,7 @@ export enum AppView {
   QUIZ_MODE = 'QUIZ_MODE',
   GUIDED_LEARNING = 'GUIDED_LEARNING',
   MISTAKES = 'MISTAKES',
+  LEADERBOARD = 'LEADERBOARD',
 }
 
 export enum QuizQuestionType {

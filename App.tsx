@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { WordGroup, AppView, UserProfile } from './types';
 import { getGroupedData, allWords } from './data';
-import { getCurrentSession, saveUserProgress, signOut, recordMistake } from './services/authService';
+import { getCurrentSession, saveUserProgress, signOut, recordMistake, getLeaderboard } from './services/authService';
 import Button from './components/Button';
 import WordCard from './components/WordCard';
 import Quiz from './components/Quiz';
@@ -30,6 +30,10 @@ const App: React.FC = () => {
   const [aiPopupPosition, setAiPopupPosition] = useState<{top: number, left: number} | null>(null);
   const [aiMeaning, setAiMeaning] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
+
+  // Leaderboard State
+  const [leaderboard, setLeaderboard] = useState<{username: string, score: number}[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
   // Check for existing session on mount
   useEffect(() => {
@@ -188,6 +192,14 @@ const App: React.FC = () => {
       setView(AppView.QUIZ_MODE);
   };
 
+  const handleShowLeaderboard = async () => {
+      setView(AppView.LEADERBOARD);
+      setLoadingLeaderboard(true);
+      const data = await getLeaderboard();
+      setLeaderboard(data);
+      setLoadingLeaderboard(false);
+  };
+
   const handleGroupSelect = (group: WordGroup) => {
     setSelectedGroup(group);
     if (view === AppView.GROUP_SELECT_LEARN) {
@@ -216,17 +228,15 @@ const App: React.FC = () => {
       </div>
       <div className="flex items-center gap-4">
           <ThemeToggle />
+          <button 
+             onClick={handleShowLeaderboard}
+             className="text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-black dark:text-zinc-500 dark:hover:text-white"
+          >
+             Top 100
+          </button>
           <span className="hidden md:block text-xs font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
              {user?.username}
           </span>
-          {view !== AppView.HOME && (
-            <button 
-              onClick={goHome}
-              className="text-xs font-bold uppercase tracking-widest hover:underline text-black dark:text-white"
-            >
-              Home
-            </button>
-          )}
           <button 
              onClick={handleSignOut}
              className="text-xs font-bold uppercase tracking-widest text-red-600 hover:text-red-500"
@@ -237,6 +247,58 @@ const App: React.FC = () => {
     </header>
   );
   
+  const renderLeaderboard = () => (
+      <div className="max-w-2xl mx-auto animate-fadeIn pb-20">
+          <div className="mb-8 text-center">
+              <h2 className="text-4xl font-serif font-bold mb-2 text-black dark:text-white">Leaderboard</h2>
+              <p className="text-zinc-500 dark:text-zinc-400">Top learners by vocabulary mastery.</p>
+          </div>
+
+          {loadingLeaderboard ? (
+              <div className="flex justify-center py-20">
+                  <div className="w-8 h-8 border-4 border-zinc-200 border-t-black dark:border-zinc-800 dark:border-t-white rounded-full animate-spin"></div>
+              </div>
+          ) : leaderboard.length === 0 ? (
+               <div className="text-center py-20 bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg">
+                  <p className="text-zinc-400">No data available yet.</p>
+               </div>
+          ) : (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden shadow-xl">
+                  {leaderboard.map((entry, idx) => {
+                      const isCurrentUser = entry.username === user?.username;
+                      const rank = idx + 1;
+                      let rankStyle = "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400";
+                      if (rank === 1) rankStyle = "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-500";
+                      if (rank === 2) rankStyle = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
+                      if (rank === 3) rankStyle = "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-500";
+
+                      return (
+                          <div 
+                             key={entry.username} 
+                             className={`flex items-center justify-between p-4 border-b border-zinc-100 dark:border-zinc-800 last:border-0 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors ${isCurrentUser ? 'bg-zinc-50 dark:bg-zinc-800/30' : ''}`}
+                          >
+                              <div className="flex items-center gap-4">
+                                  <div className={`w-10 h-10 flex items-center justify-center rounded-full font-bold text-sm ${rankStyle}`}>
+                                      #{rank}
+                                  </div>
+                                  <div className="flex flex-col">
+                                      <span className={`font-medium text-lg ${isCurrentUser ? 'font-bold text-black dark:text-white' : 'text-zinc-700 dark:text-zinc-300'}`}>
+                                          {entry.username} {isCurrentUser && "(You)"}
+                                      </span>
+                                  </div>
+                              </div>
+                              <div className="text-right">
+                                  <span className="block text-xl font-bold font-serif text-black dark:text-white">{entry.score}</span>
+                                  <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest">Words</span>
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+          )}
+      </div>
+  );
+
   const renderMistakes = () => {
       const mistakeIds = Object.keys(user?.mistakes || {});
       const mistakeList = mistakeIds
@@ -250,7 +312,7 @@ const App: React.FC = () => {
       return (
           <div className="animate-slideUp pb-20">
               <div className="mb-8">
-                <h2 className="text-4xl font-serif font-bold mb-2">My Mistakes</h2>
+                <h2 className="text-4xl font-serif font-bold mb-2 text-black dark:text-white">My Mistakes</h2>
                 <p className="text-zinc-500 dark:text-zinc-400">Words you have struggled with.</p>
               </div>
               
@@ -265,7 +327,7 @@ const App: React.FC = () => {
                           <div key={item!.id} className="border border-red-100 dark:border-red-900/50 bg-red-50/30 dark:bg-red-900/10 p-4 flex justify-between items-center rounded-lg transition-transform hover:scale-[1.01]">
                               <div>
                                   <div className="flex items-center gap-2">
-                                      <h3 className="text-lg font-bold font-serif dark:text-red-50">{item!.term}</h3>
+                                      <h3 className="text-lg font-bold font-serif dark:text-red-50 text-black">{item!.term}</h3>
                                       <span className="text-[10px] bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 px-2 py-0.5 rounded-full font-bold">
                                           Missed {item!.count}x
                                       </span>
@@ -370,6 +432,12 @@ const App: React.FC = () => {
                 </div>
             </div>
         </div>
+        
+        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md animate-slideUp" style={{ animationDelay: '0.25s' }}>
+             <Button onClick={handleShowLeaderboard} variant="outline" fullWidth className="h-14 text-lg border-yellow-600/50 text-yellow-700 dark:text-yellow-500 hover:border-yellow-600">
+                🏆 Leaderboard
+             </Button>
+        </div>
 
         <div className="flex flex-col md:flex-row gap-4 w-full max-w-md animate-slideUp" style={{ animationDelay: '0.3s' }}>
           <Button onClick={() => setView(AppView.MISTAKES)} variant="secondary" fullWidth className="h-14 text-lg">
@@ -392,7 +460,7 @@ const App: React.FC = () => {
   const renderGroupSelection = (mode: 'learn' | 'quiz') => (
     <div className="animate-fadeIn">
       <div className="mb-8">
-        <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2">
+        <h2 className="text-3xl md:text-4xl font-serif font-bold mb-2 text-black dark:text-white">
           {mode === 'learn' ? 'Select a Group to Learn' : 'Select a Group to Test'}
         </h2>
         <p className="text-zinc-500 dark:text-zinc-400">
@@ -505,6 +573,7 @@ const App: React.FC = () => {
           {view === AppView.LEARN_MODE && renderLearnMode()}
           {view === AppView.QUIZ_MODE && renderQuizMode()}
           {view === AppView.MISTAKES && renderMistakes()}
+          {view === AppView.LEADERBOARD && renderLeaderboard()}
           {view === AppView.GUIDED_LEARNING && (
              <GuidedLearning 
                 initialIndex={learningIndex} 
