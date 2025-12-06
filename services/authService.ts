@@ -7,7 +7,8 @@ const SESSION_KEY = 'gx_current_session';
 // Helper to get all users
 const getDB = (): Record<string, any> => {
     try {
-        return JSON.parse(localStorage.getItem(USERS_KEY) || '{}');
+        const data = localStorage.getItem(USERS_KEY);
+        return data ? JSON.parse(data) : {};
     } catch {
         return {};
     }
@@ -20,7 +21,7 @@ const saveDB = (db: Record<string, any>) => {
 
 export const signUp = (username: string, password: string): Promise<UserProfile> => {
     return new Promise((resolve, reject) => {
-        setTimeout(() => {
+        try {
             const db = getDB();
             const cleanUser = username.trim().toLowerCase();
 
@@ -47,28 +48,40 @@ export const signUp = (username: string, password: string): Promise<UserProfile>
             // Auto login
             localStorage.setItem(SESSION_KEY, cleanUser);
             
+            console.log("User registered:", cleanUser);
+
             resolve({
                 username: cleanUser,
                 learningIndex: 0,
                 learnedWords: [],
                 mistakes: {}
             });
-        }, 500); // Simulate network delay
+        } catch (e) {
+            console.error("Signup error", e);
+            reject("An error occurred during sign up.");
+        }
     });
 };
 
 export const signIn = (username: string, password: string): Promise<UserProfile> => {
     return new Promise((resolve, reject) => {
-        setTimeout(() => {
+        try {
             const db = getDB();
             const cleanUser = username.trim().toLowerCase();
             const userRecord = db[cleanUser];
 
-            if (!userRecord || userRecord.password !== password) {
-                return reject("Invalid username or password.");
+            console.log("Attempting login for:", cleanUser);
+
+            if (!userRecord) {
+                return reject("User not found. Please sign up.");
+            }
+            
+            if (userRecord.password !== password) {
+                return reject("Invalid password.");
             }
 
             localStorage.setItem(SESSION_KEY, cleanUser);
+            console.log("Login successful");
 
             resolve({
                 username: userRecord.username,
@@ -76,7 +89,10 @@ export const signIn = (username: string, password: string): Promise<UserProfile>
                 learnedWords: userRecord.learnedWords || [],
                 mistakes: userRecord.mistakes || {}
             });
-        }, 500);
+        } catch (e) {
+            console.error("Signin error", e);
+            reject("An error occurred during sign in.");
+        }
     });
 };
 
@@ -85,20 +101,24 @@ export const signOut = () => {
 };
 
 export const getCurrentSession = (): UserProfile | null => {
-    const username = localStorage.getItem(SESSION_KEY);
-    if (!username) return null;
+    try {
+        const username = localStorage.getItem(SESSION_KEY);
+        if (!username) return null;
 
-    const db = getDB();
-    const user = db[username];
-    
-    if (!user) return null;
+        const db = getDB();
+        const user = db[username];
+        
+        if (!user) return null;
 
-    return {
-        username: user.username,
-        learningIndex: user.learningIndex || 0,
-        learnedWords: user.learnedWords || [],
-        mistakes: user.mistakes || {}
-    };
+        return {
+            username: user.username,
+            learningIndex: user.learningIndex || 0,
+            learnedWords: user.learnedWords || [],
+            mistakes: user.mistakes || {}
+        };
+    } catch (e) {
+        return null;
+    }
 };
 
 export const saveUserProgress = (username: string, learningIndex: number, learnedWords: string[]) => {
@@ -119,4 +139,4 @@ export const recordMistake = (username: string, wordId: string) => {
         db[username].mistakes = currentMistakes;
         saveDB(db);
     }
-}
+};
