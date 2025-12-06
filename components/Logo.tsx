@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 const Logo: React.FC<{ className?: string }> = ({ className = "" }) => {
@@ -11,12 +10,9 @@ const Logo: React.FC<{ className?: string }> = ({ className = "" }) => {
         </svg>
         <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-black dark:bg-white rounded-full border-2 border-white dark:border-zinc-950"></div>
       </div>
-      <div className="flex flex-col justify-center">
+      <div className="flex flex-col justify-center h-8">
           <span className="text-xl font-serif font-black tracking-tighter leading-none">
             GX VOCAB
-          </span>
-          <span className="text-[9px] font-sans font-bold uppercase tracking-[0.2em] text-zinc-400 leading-none mt-1">
-            Academy
           </span>
       </div>
     </div>

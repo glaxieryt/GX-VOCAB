@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion } from '../types';
 import { allWords } from '../data';
@@ -34,16 +33,11 @@ const shuffleArray = (array: any[]) => {
 // --- Helper for Underlining ---
 const highlightWord = (text: string, term: string): string => {
     if (!text) return "";
-    // If already contains HTML tags for underline, assume it's good (or partially good)
     if (text.includes('<u>')) return text;
 
     try {
-        // Escape special regex characters in the term
         const safeTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // Match word boundary, allow for suffixes like 'd', 'ed', 's', 'ing' (basic heuristic)
-        // \w* allows for 'Abate' matching 'Abated'
         const regex = new RegExp(`\\b${safeTerm}\\w*\\b`, 'gi');
-        
         return text.replace(regex, (match) => `<u>${match}</u>`);
     } catch (e) {
         return text;
@@ -77,7 +71,6 @@ async function decodeAudioData(
   for (let channel = 0; channel < numChannels; channel++) {
     const channelData = buffer.getChannelData(channel);
     for (let i = 0; i < frameCount; i++) {
-      // Convert PCM 16-bit to Float32 (-1.0 to 1.0)
       channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
     }
   }
@@ -85,14 +78,12 @@ async function decodeAudioData(
 }
 
 export const speakText = async (text: string) => {
-    // 1. Browser Native Fallback (Offline or No Key)
     if (!ai) {
         speakNative(text);
         return;
     }
 
     try {
-        // Initialize Audio Context on user gesture
         if (!audioContext) {
              audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
         }
@@ -100,10 +91,7 @@ export const speakText = async (text: string) => {
             await audioContext.resume();
         }
 
-        // Clean HTML tags for pronunciation
         const cleanText = text.replace(/<[^>]*>/g, '');
-        
-        // Adjust prompt based on whether it is a single word or a sentence
         const isSentence = cleanText.trim().includes(' ');
         const prompt = isSentence 
             ? `Read the following sentence naturally, with a soft and soothing tone: "${cleanText}"`
@@ -117,7 +105,7 @@ export const speakText = async (text: string) => {
                     responseModalities: [Modality.AUDIO],
                     speechConfig: {
                         voiceConfig: {
-                            prebuiltVoiceConfig: { voiceName: 'Kore' }, // Kore is the standard Female voice in Gemini
+                            prebuiltVoiceConfig: { voiceName: 'Kore' },
                         },
                     },
                 },
@@ -126,7 +114,6 @@ export const speakText = async (text: string) => {
         );
 
         const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        
         if (!base64Audio) throw new Error("No audio data received");
 
         const audioBuffer = await decodeAudioData(
@@ -147,24 +134,14 @@ export const speakText = async (text: string) => {
     }
 };
 
-// Fallback to browser speech
 const speakNative = (text: string) => {
     const cleanText = text.replace(/<[^>]*>/g, '');
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = 'en-US';
     
-    // STRICTLY filter for female voices by name
     const voices = window.speechSynthesis.getVoices();
     const preferredVoice = voices.find(v => 
-        (
-            v.name.includes('Female') || 
-            v.name.includes('Google US English') || 
-            v.name.includes('Samantha') || 
-            v.name.includes('Victoria') ||
-            v.name.includes('Zira') ||
-            v.name.includes('Susan') ||
-            v.name.includes('Ava')
-        ) 
+        (v.name.includes('Female') || v.name.includes('Google US English') || v.name.includes('Samantha') || v.name.includes('Zira')) 
         && v.lang.startsWith('en')
     );
     
@@ -172,7 +149,6 @@ const speakNative = (text: string) => {
         utterance.voice = preferredVoice;
     }
     
-    // Make it softer and sweeter
     utterance.rate = 0.9;
     utterance.pitch = 1.15; 
 
@@ -180,13 +156,14 @@ const speakNative = (text: string) => {
 };
 
 
-export const getEasyMeaning = async (word: string, meaning: string): Promise<string> => {
+export const getEasyMeaning = async (word: string, context?: string): Promise<string> => {
   if (!ai) return "Meaning not available (Offline).";
 
   try {
     const prompt = `
-      Provide a very short, easy-to-remember explanation or mnemonic for the vocabulary word "${word}" which means "${meaning}".
-      Keep it under 25 words. Make it catchy or use a simple analogy.
+      Provide a very short, easy-to-remember explanation or definition for the text "${word}".
+      ${context ? `Context: This word refers to: "${context}".` : ''}
+      Keep it under 20 words. Simple language.
       Do not add markdown formatting or quotes.
     `;
 
@@ -195,13 +172,13 @@ export const getEasyMeaning = async (word: string, meaning: string): Promise<str
             model: 'gemini-2.5-flash',
             contents: prompt,
         }),
-        5000 // 5s timeout
+        5000
     );
 
-    return response.text || "No simple meaning available.";
+    return response.text?.trim() || "No simple meaning available.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Could not generate mnemonic.";
+    return "Could not generate meaning.";
   }
 };
 
@@ -223,18 +200,12 @@ export const getSentence = async (word: string, meaning: string): Promise<string
 };
 
 export const generateContextQuizQuestion = async (word: Word, distractors: string[]): Promise<QuizQuestion> => {
-    if (!ai) {
-         throw new Error("No API Key");
-    }
+    if (!ai) throw new Error("No API Key");
 
     const prompt = `
       Create a "Context" quiz question for the word "${word.term}" (meaning: ${word.meaning}).
-      
       Task: Write a single clear sentence that uses the word "${word.term}".
-      Format: Return ONLY the sentence. Wrap the word "${word.term}" (or its variation like ${word.term}ed) in HTML <u> tags.
-      
-      Example Input: Word: Abate
-      Example Output: The storm began to <u>abate</u>, allowing us to leave.
+      Format: Return ONLY the sentence. Wrap the word "${word.term}" (or its variation) in HTML <u> tags.
     `;
 
     try {
@@ -247,11 +218,7 @@ export const generateContextQuizQuestion = async (word: Word, distractors: strin
         );
         
         let sentence = response.text?.trim() || "";
-        // Cleanup if model adds labels
-        sentence = sentence.replace(/^sentence:\s*/i, '');
-        sentence = sentence.replace(/`/g, '');
-        
-        // Ensure underlining if the model forgot
+        sentence = sentence.replace(/^sentence:\s*/i, '').replace(/`/g, '');
         sentence = highlightWord(sentence, word.term);
 
         const options = [...distractors, word.meaning];
@@ -271,18 +238,12 @@ export const generateContextQuizQuestion = async (word: Word, distractors: strin
     }
 }
 
-// --- Guided Learning Content Generation ---
-
 export const generateLessonContent = async (word: Word, previousWords: Word[] = []): Promise<Lesson> => {
-  // Use fallback immediately if no AI
-  if (!ai) {
-      return generateFallbackLesson(word);
-  }
+  if (!ai) return generateFallbackLesson(word);
 
   try {
     const prompt = `
       Generate a vocabulary lesson for the word: "${word.term}" (Meaning: "${word.meaning}").
-      
       Output JSON format ONLY:
       {
         "introSentence": "A clear, simple sentence using the word. Wrap the word ${word.term} in <u> tags.",
@@ -303,20 +264,14 @@ export const generateLessonContent = async (word: Word, previousWords: Word[] = 
         ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-            }
+            config: { responseMimeType: "application/json" }
         }),
-        8000 // 8s timeout for lesson generation
+        8000
     );
 
     const data = JSON.parse(response.text || "{}");
-    
-    if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
-        throw new Error("Invalid AI response format");
-    }
+    if (!data.questions || !Array.isArray(data.questions)) throw new Error("Invalid format");
 
-    // Construct Lesson Object
     const questions: LearningQuestion[] = data.questions.map((q: any, idx: number) => {
         const opts = [
             { id: 'opt_c', text: q.correctMeaning, isCorrect: true },
@@ -324,7 +279,6 @@ export const generateLessonContent = async (word: Word, previousWords: Word[] = 
             { id: 'opt_w2', text: q.wrongMeaning2, isCorrect: false },
             { id: 'opt_w3', text: q.wrongMeaning3, isCorrect: false },
         ];
-        
         shuffleArray(opts);
 
         return {
@@ -341,21 +295,18 @@ export const generateLessonContent = async (word: Word, previousWords: Word[] = 
         targetWord: word,
         intro: {
             definition: word.meaning,
-            exampleSentence: highlightWord(data.introSentence || word.sentence || `The word ${word.term} is used in English.`, word.term)
+            exampleSentence: highlightWord(data.introSentence || word.sentence || `The word ${word.term} is used here.`, word.term)
         },
         queue: questions
     };
 
   } catch (error) {
-    console.error("Gemini Lesson Gen Error (Falling back to local):", error);
     return generateFallbackLesson(word);
   }
 };
 
 export const generateReviewQuestion = async (word: Word): Promise<LearningQuestion> => {
-    if (!ai) {
-        return generateFallbackReview(word);
-    }
+    if (!ai) return generateFallbackReview(word);
     
     try {
         const prompt = `
@@ -377,14 +328,13 @@ export const generateReviewQuestion = async (word: Word): Promise<LearningQuesti
             { id: 'w2', text: d.distractor2 || "Wrong 2", isCorrect: false },
             { id: 'w3', text: d.distractor3 || "Wrong 3", isCorrect: false }
         ];
-        
         shuffleArray(opts);
         
         return {
             id: `rev_${word.id}_${Date.now()}`,
             type: 'REVIEW',
             word: word,
-            sentence: highlightWord(d.sentence || `${word.term} is the word here.`, word.term),
+            sentence: highlightWord(d.sentence || `${word.term} is used here.`, word.term),
             questionText: `What does "${word.term}" mean in this context?`,
             options: opts
         };
@@ -393,23 +343,18 @@ export const generateReviewQuestion = async (word: Word): Promise<LearningQuesti
     }
 }
 
-// Fallbacks used if offline or error
 const generateFallbackLesson = (word: Word): Lesson => {
     const fallbackQ = (idx: number): LearningQuestion => {
-        // Pick random distractors from data
         const distractors = [];
         for(let i=0; i<3; i++) {
              const r = Math.floor(Math.random() * allWords.length);
              distractors.push(allWords[r]?.meaning || "Another meaning");
         }
-        
         const opts = [
             { id: 'c', text: word.meaning, isCorrect: true },
             ...distractors.map((d, i) => ({ id: `w${i}`, text: d, isCorrect: false }))
         ];
-        
         shuffleArray(opts);
-
         return {
             id: `fb_${word.id}_${idx}`,
             type: idx === 0 ? 'COMPREHENSION' : 'PRACTICE',
@@ -424,7 +369,7 @@ const generateFallbackLesson = (word: Word): Lesson => {
         targetWord: word,
         intro: {
             definition: word.meaning,
-            exampleSentence: highlightWord(word.sentence || "Example unavailable (Offline Mode).", word.term)
+            exampleSentence: highlightWord(word.sentence || "Example unavailable.", word.term)
         },
         queue: Array.from({length: 3}, (_, i) => fallbackQ(i))
     };
@@ -440,9 +385,7 @@ const generateFallbackReview = (word: Word): LearningQuestion => {
          { id: 'c', text: word.meaning, isCorrect: true },
          ...distractors.map((d, i) => ({ id: `w${i}`, text: d, isCorrect: false }))
      ];
-     
      shuffleArray(opts);
-
      return {
          id: `rev_fb_${word.id}`,
          type: 'REVIEW',

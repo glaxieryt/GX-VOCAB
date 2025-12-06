@@ -1,9 +1,9 @@
-
 import React, { useState } from 'react';
 import { signIn, signUp } from '../services/authService';
 import { UserProfile } from '../types';
 import Logo from './Logo';
 import Button from './Button';
+import ThemeToggle from './ThemeToggle';
 
 interface AuthScreenProps {
     onAuthSuccess: (user: UserProfile) => void;
@@ -69,7 +69,12 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-zinc-950 px-4 animate-fadeIn transition-colors">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-zinc-950 px-4 animate-fadeIn transition-colors relative">
+            
+            <div className="absolute top-4 right-4">
+                <ThemeToggle />
+            </div>
+
             <div className="mb-10 scale-125">
                 <Logo className="dark:text-white" />
             </div>
@@ -162,7 +167,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
             <p className="mt-8 text-zinc-400 dark:text-zinc-500 text-xs text-center max-w-xs leading-relaxed">
                 {isSignUp 
                     ? "Your progress is saved securely." 
-                    : "Welcome back. Log in to continue your mastery."}
+                    : "Welcome back to your vocabulary journey."}
             </p>
         </div>
     );

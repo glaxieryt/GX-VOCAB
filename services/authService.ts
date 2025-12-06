@@ -1,12 +1,26 @@
+
 import { UserProfile } from '../types';
 
 const USERS_KEY = 'gx_users_db';
 const SESSION_KEY = 'gx_current_session';
 
 // --- SUPABASE CONFIG ---
-// We access these via process.env because vite.config.ts injects them safely
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY;
+// Robustly check for keys in various environments (Vite local, Vercel build, Runtime)
+const getEnvVar = (key: string, viteKey: string) => {
+    // Check standard Vite import.meta.env
+    // Cast to any to avoid TS errors if vite types aren't explicitly loaded in this context
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[viteKey]) {
+        return (import.meta as any).env[viteKey];
+    }
+    // Check process.env (injected by define in vite.config.ts)
+    if (typeof process !== 'undefined' && process.env) {
+        return process.env[viteKey] || process.env[key];
+    }
+    return '';
+};
+
+const SUPABASE_URL = getEnvVar('SUPABASE_URL', 'VITE_SUPABASE_URL');
+const SUPABASE_KEY = getEnvVar('SUPABASE_ANON_KEY', 'VITE_SUPABASE_KEY');
 
 const hasSupabase = !!(SUPABASE_URL && SUPABASE_KEY);
 
@@ -71,7 +85,7 @@ export const signUp = async (username: string, password: string): Promise<UserPr
             if (!createRes.ok) {
                 const err = await createRes.json();
                 console.error("Supabase Error:", err);
-                throw "Error creating account. Ensure database table 'users' exists.";
+                throw err.message || err.error_description || "Error creating account. Ensure database table 'users' exists.";
             }
             
             localStorage.setItem(SESSION_KEY, cleanUser);
@@ -113,7 +127,11 @@ export const signIn = async (username: string, password: string): Promise<UserPr
                 method: 'GET', headers: apiHeaders
             });
             
-            if (!res.ok) throw "Database connection error";
+            if (!res.ok) {
+                const err = await res.json();
+                console.error("Supabase Login Error:", err);
+                throw "Database connection error";
+            }
 
             const users = await res.json();
             

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { WordGroup, AppView, UserProfile } from './types';
 import { getGroupedData, allWords } from './data';
@@ -10,6 +9,7 @@ import GuidedLearning from './components/GuidedLearning';
 import Logo from './components/Logo';
 import AuthScreen from './components/AuthScreen';
 import ThemeToggle from './components/ThemeToggle';
+import { getEasyMeaning } from './services/geminiService';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -24,6 +24,12 @@ const App: React.FC = () => {
   // Loading state
   const [checkingSession, setCheckingSession] = useState(true);
 
+  // Ask AI Popup State
+  const [selectedText, setSelectedText] = useState<string | null>(null);
+  const [aiPopupPosition, setAiPopupPosition] = useState<{top: number, left: number} | null>(null);
+  const [aiMeaning, setAiMeaning] = useState<string | null>(null);
+  const [loadingAi, setLoadingAi] = useState(false);
+
   // Check for existing session on mount
   useEffect(() => {
     const initSession = async () => {
@@ -36,6 +42,37 @@ const App: React.FC = () => {
         setCheckingSession(false);
     };
     initSession();
+  }, []);
+
+  // Text Selection Listener
+  useEffect(() => {
+    const handleSelection = () => {
+        const selection = window.getSelection();
+        const text = selection?.toString().trim();
+
+        if (text && text.length > 0 && text.length < 50) {
+            const range = selection?.getRangeAt(0);
+            const rect = range?.getBoundingClientRect();
+            if (rect) {
+                // Position above the selection
+                setAiPopupPosition({
+                    top: rect.top + window.scrollY - 50,
+                    left: rect.left + window.scrollX + (rect.width / 2)
+                });
+                setSelectedText(text);
+                setAiMeaning(null); // Reset previous result
+                setLoadingAi(false);
+            }
+        } else {
+            // Clicked away or empty selection
+            setAiPopupPosition(null);
+            setSelectedText(null);
+        }
+    };
+
+    // Use mouseup to detect end of drag/selection
+    document.addEventListener('mouseup', handleSelection);
+    return () => document.removeEventListener('mouseup', handleSelection);
   }, []);
 
   const handleAuthSuccess = (loggedInUser: UserProfile) => {
@@ -69,7 +106,6 @@ const App: React.FC = () => {
   const handleMistake = (wordId: string) => {
       if (user) {
           recordMistake(user.username, wordId);
-          // Update local state
           setUser(prev => {
               if(!prev) return null;
               const newMistakes = { ...prev.mistakes };
@@ -86,6 +122,14 @@ const App: React.FC = () => {
       setLearnedWords([]);
       saveProgress(0, []);
     }
+  };
+
+  const handleAskAI = async () => {
+      if (!selectedText) return;
+      setLoadingAi(true);
+      const meaning = await getEasyMeaning(selectedText, "General Context");
+      setAiMeaning(meaning);
+      setLoadingAi(false);
   };
 
   const groups = useMemo(() => getGroupedData(30), []);
@@ -105,17 +149,13 @@ const App: React.FC = () => {
       setView(AppView.GUIDED_LEARNING);
   };
 
-  // Logic to start Full Revision
   const handleStartRevision = () => {
       if (!user || !user.learnedWords || user.learnedWords.length === 0) {
           alert("You haven't learned any words yet! Complete some daily lessons first.");
           return;
       }
 
-      // Filter words that the user has learned
       const learnedObjects = allWords.filter(w => user.learnedWords.includes(w.id));
-      
-      // Shuffle them for better practice
       const shuffled = [...learnedObjects].sort(() => Math.random() - 0.5);
 
       const revisionGroup: WordGroup = {
@@ -188,21 +228,21 @@ const App: React.FC = () => {
         .sort((a,b) => (b?.count || 0) - (a?.count || 0));
 
       return (
-          <div className="animate-fadeIn pb-20">
+          <div className="animate-slideUp pb-20">
               <div className="mb-8">
                 <h2 className="text-4xl font-serif font-bold mb-2">My Mistakes</h2>
                 <p className="text-zinc-500 dark:text-zinc-400">Words you have struggled with.</p>
               </div>
               
               {mistakeList.length === 0 ? (
-                  <div className="text-center py-20 bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700">
+                  <div className="text-center py-20 bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg">
                       <p className="text-xl text-zinc-400 font-serif">You haven't made any mistakes yet.</p>
                       <p className="text-sm text-zinc-400 mt-2">Keep learning!</p>
                   </div>
               ) : (
                   <div className="space-y-4">
                       {mistakeList.map((item) => (
-                          <div key={item!.id} className="border border-red-100 dark:border-red-900/50 bg-red-50/30 dark:bg-red-900/10 p-4 flex justify-between items-center rounded-lg">
+                          <div key={item!.id} className="border border-red-100 dark:border-red-900/50 bg-red-50/30 dark:bg-red-900/10 p-4 flex justify-between items-center rounded-lg transition-transform hover:scale-[1.01]">
                               <div>
                                   <div className="flex items-center gap-2">
                                       <h3 className="text-lg font-bold font-serif dark:text-red-50">{item!.term}</h3>
@@ -228,15 +268,15 @@ const App: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-12 animate-fadeIn pb-12">
         <div className="text-center space-y-4 px-4">
-          <h2 className="text-5xl md:text-8xl font-serif font-medium tracking-tight text-black dark:text-white">Master English</h2>
-          <p className="text-zinc-500 dark:text-zinc-400 max-w-md mx-auto text-lg font-light">
+          <h2 className="text-5xl md:text-8xl font-serif font-medium tracking-tight text-black dark:text-white animate-slideUp">Master English</h2>
+          <p className="text-zinc-500 dark:text-zinc-400 max-w-md mx-auto text-lg font-light animate-slideUp" style={{ animationDelay: '0.1s' }}>
             Your personalized journey to 1500 advanced vocabulary words.
           </p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl animate-slideUp" style={{ animationDelay: '0.2s' }}>
             {/* Daily Lesson Card */}
-            <div className="border border-black dark:border-zinc-700 p-6 bg-zinc-50 dark:bg-zinc-900 shadow-lg relative overflow-hidden group cursor-pointer transition-transform hover:-translate-y-1 rounded-sm flex flex-col justify-between h-64" onClick={handleStartGuided}>
+            <div className="border border-black dark:border-zinc-700 p-6 bg-zinc-50 dark:bg-zinc-900 shadow-lg relative overflow-hidden group cursor-pointer transition-all hover:-translate-y-1 rounded-sm flex flex-col justify-between h-64 hover:shadow-2xl" onClick={handleStartGuided}>
                 <div>
                     <div className="absolute top-0 right-0 bg-black dark:bg-white text-white dark:text-black px-3 py-1 text-[10px] font-bold uppercase tracking-widest">
                         Guided Path
@@ -277,7 +317,7 @@ const App: React.FC = () => {
 
             {/* Revision Card */}
             <div 
-                className={`border border-zinc-200 dark:border-zinc-800 p-6 bg-white dark:bg-zinc-950 shadow-md relative overflow-hidden group transition-transform rounded-sm flex flex-col justify-between h-64 ${wordsLearnedCount > 0 ? 'cursor-pointer hover:-translate-y-1 hover:border-black dark:hover:border-white' : 'opacity-60 cursor-not-allowed'}`} 
+                className={`border border-zinc-200 dark:border-zinc-800 p-6 bg-white dark:bg-zinc-950 shadow-md relative overflow-hidden group transition-all rounded-sm flex flex-col justify-between h-64 ${wordsLearnedCount > 0 ? 'cursor-pointer hover:-translate-y-1 hover:border-black dark:hover:border-white hover:shadow-xl' : 'opacity-60 cursor-not-allowed'}`} 
                 onClick={wordsLearnedCount > 0 ? handleStartRevision : undefined}
             >
                 <div>
@@ -311,13 +351,13 @@ const App: React.FC = () => {
             </div>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md">
+        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md animate-slideUp" style={{ animationDelay: '0.3s' }}>
           <Button onClick={() => setView(AppView.MISTAKES)} variant="secondary" fullWidth className="h-14 text-lg">
              My Mistakes ({Object.keys(user?.mistakes || {}).length})
           </Button>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md opacity-70 hover:opacity-100 transition-opacity">
+        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md opacity-70 hover:opacity-100 transition-opacity animate-slideUp" style={{ animationDelay: '0.4s' }}>
           <Button onClick={handleStartLearn} fullWidth variant="outline">
             Browse Groups
           </Button>
@@ -391,7 +431,7 @@ const App: React.FC = () => {
     if (quizResult) {
       const percentage = quizResult.total > 0 ? Math.round((quizResult.score / quizResult.total) * 100) : 0;
       return (
-        <div className="flex flex-col items-center justify-center min-h-[50vh] animate-fadeIn text-center">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] animate-popIn text-center">
           <span className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-4">Results</span>
           <h2 className="text-8xl font-serif font-bold mb-4 text-black dark:text-white">{percentage}%</h2>
           <p className="text-2xl mb-8 text-black dark:text-white">
@@ -434,7 +474,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950 text-black dark:text-white px-4 md:px-8 font-sans selection:bg-black selection:text-white dark:selection:bg-white dark:selection:text-black transition-colors duration-300">
+    <div className="min-h-screen bg-white dark:bg-zinc-950 text-black dark:text-white px-4 md:px-8 font-sans selection:bg-black selection:text-white dark:selection:bg-white dark:selection:text-black transition-colors duration-300 relative">
       <div className="max-w-5xl mx-auto">
         {renderHeader()}
         
@@ -456,6 +496,42 @@ const App: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Ask AI Context Menu */}
+      {aiPopupPosition && selectedText && (
+          <div 
+             className="fixed z-50 bg-black dark:bg-white text-white dark:text-black rounded-lg shadow-2xl p-4 w-72 animate-popIn"
+             style={{ top: aiPopupPosition.top, left: aiPopupPosition.left, transform: 'translateX(-50%) translateY(-100%)' }}
+             onMouseDown={(e) => e.stopPropagation()} 
+          >
+              <div className="flex justify-between items-start mb-2">
+                  <span className="text-xs font-bold uppercase tracking-widest opacity-70">Ask AI</span>
+              </div>
+              
+              <div className="text-lg font-serif italic mb-3 border-l-2 border-white/30 dark:border-black/30 pl-3">"{selectedText}"</div>
+              
+              {loadingAi ? (
+                  <div className="flex items-center gap-2 text-xs opacity-70">
+                      <div className="w-2 h-2 bg-white dark:bg-black rounded-full animate-bounce"></div>
+                      Thinking...
+                  </div>
+              ) : aiMeaning ? (
+                  <div className="text-sm leading-relaxed animate-fadeIn bg-white/10 dark:bg-black/5 p-2 rounded">
+                      {aiMeaning}
+                  </div>
+              ) : (
+                  <button 
+                     onClick={handleAskAI}
+                     className="bg-white/20 hover:bg-white/30 dark:bg-black/10 dark:hover:bg-black/20 w-full py-2 text-xs font-bold uppercase rounded transition-colors"
+                  >
+                      Get Simple Meaning
+                  </button>
+              )}
+              
+              {/* Arrow */}
+              <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 bg-black dark:bg-white rotate-45"></div>
+          </div>
+      )}
     </div>
   );
 };
