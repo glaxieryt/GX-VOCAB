@@ -54,7 +54,7 @@ const WordCard: React.FC<WordCardProps> = ({ word }) => {
 
   return (
     <div 
-      className={`border-b border-zinc-200 py-4 transition-all duration-300 ${isOpen ? 'bg-zinc-50 -mx-4 px-4' : ''}`}
+      className={`border-b border-zinc-200 dark:border-zinc-800 py-4 transition-all duration-300 ${isOpen ? 'bg-zinc-50 dark:bg-zinc-900/50 -mx-4 px-4' : ''}`}
     >
       <div 
         className="flex justify-between items-center cursor-pointer group" 
@@ -62,20 +62,19 @@ const WordCard: React.FC<WordCardProps> = ({ word }) => {
       >
         <div className="flex flex-col">
             <div className="flex items-center gap-3">
-              <h3 className="text-xl font-bold font-serif tracking-tight group-hover:underline decoration-1 underline-offset-4">
+              <h3 className="text-xl font-bold font-serif tracking-tight group-hover:underline decoration-1 underline-offset-4 text-black dark:text-white">
               {word.term}
               </h3>
               <button 
                 onClick={handlePronounce}
-                className="text-zinc-400 hover:text-black transition-colors p-1 rounded-full hover:bg-zinc-200"
+                className="text-zinc-400 hover:text-black dark:hover:text-white transition-colors p-1 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700"
                 title="Pronounce"
               >
                  <SpeakerIcon />
               </button>
             </div>
-            {/* Show category tag if open */}
             {isOpen && word.category && (
-                <span className="text-[10px] uppercase font-bold text-zinc-400 mt-1 tracking-wider">{word.category}</span>
+                <span className="text-[10px] uppercase font-bold text-zinc-400 dark:text-zinc-500 mt-1 tracking-wider">{word.category}</span>
             )}
         </div>
         <span className={`text-2xl font-light text-zinc-400 transition-transform duration-300 ${isOpen ? 'rotate-45' : ''}`}>
@@ -84,7 +83,7 @@ const WordCard: React.FC<WordCardProps> = ({ word }) => {
       </div>
 
       {isOpen && (
-        <div className="mt-4 text-zinc-800 space-y-6 animate-fadeIn">
+        <div className="mt-4 text-zinc-800 dark:text-zinc-200 space-y-6 animate-fadeIn">
           <div>
             <span className="text-xs font-bold uppercase tracking-widest text-zinc-400 block mb-1">Definition</span>
             <p className="text-lg leading-relaxed">{word.meaning}</p>
@@ -93,7 +92,7 @@ const WordCard: React.FC<WordCardProps> = ({ word }) => {
           <div>
              <span className="text-xs font-bold uppercase tracking-widest text-zinc-400 block mb-1">Usage</span>
              {displaySentence ? (
-                 <p className="text-md italic text-zinc-600 border-l-2 border-zinc-300 pl-4">"{displaySentence}"</p>
+                 <p className="text-md italic text-zinc-600 dark:text-zinc-400 border-l-2 border-zinc-300 dark:border-zinc-700 pl-4">"{displaySentence}"</p>
              ) : (
                  <div className="text-zinc-400 text-sm italic">
                      {loadingSentence ? "Generating example..." : "No example available."}
@@ -112,11 +111,11 @@ const WordCard: React.FC<WordCardProps> = ({ word }) => {
                 {loadingMnemonic ? "Asking AI..." : "Get AI Mnemonic"}
               </Button>
             ) : (
-              <div className="bg-white border border-zinc-200 p-4 relative mt-2">
-                <span className="absolute -top-2 left-3 bg-white px-1 text-xs font-bold uppercase tracking-widest text-zinc-500">
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 relative mt-2">
+                <span className="absolute -top-2 left-3 bg-white dark:bg-zinc-900 px-1 text-xs font-bold uppercase tracking-widest text-zinc-500">
                   Easy To Remember
                 </span>
-                <p className="text-zinc-700 font-medium">{easyMeaning}</p>
+                <p className="text-zinc-700 dark:text-zinc-300 font-medium">{easyMeaning}</p>
               </div>
             )}
           </div>

@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
+  // We use process.cwd() to ensure we look in the right place during Vercel builds.
   const env = loadEnv(mode, (process as any).cwd(), '');
 
   return {
@@ -13,13 +14,13 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       // Safely inject the API key. 
-      // If env.API_KEY is undefined (build time vs run time), it might default to undefined,
-      // so we use specific replacement to avoid replacing the whole `process.env` object
-      // which causes libraries to crash.
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
       
+      // Inject Supabase keys, checking both VITE_ prefixed (manual) and non-prefixed (Vercel Integration) names
+      'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || env.SUPABASE_URL || ''),
+      'process.env.VITE_SUPABASE_KEY': JSON.stringify(env.VITE_SUPABASE_KEY || env.SUPABASE_ANON_KEY || ''),
+      
       // Fallback for other process.env accesses to prevent "process is not defined"
-      // BUT do NOT overwrite the specific keys defined above.
       'process.env.NODE_ENV': JSON.stringify(mode),
       'process.env': {}, 
     }

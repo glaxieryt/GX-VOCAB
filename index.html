@@ -13,6 +13,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
@@ -27,6 +28,13 @@
                 '0%': { opacity: '0', transform: 'translateY(10px)' },
                 '100%': { opacity: '1', transform: 'translateY(0)' },
               }
+            },
+            colors: {
+              zinc: {
+                850: '#1f1f22',
+                900: '#18181b',
+                950: '#09090b',
+              }
             }
           }
         }
@@ -36,8 +44,8 @@
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #ffffff;
-        color: #000000;
+        /* background-color: #ffffff;  Removed fixed bg to allow dark mode */
+        /* color: #000000; Removed fixed color */
         -webkit-font-smoothing: antialiased;
       }
       /* Custom Scrollbar for minimalist look */
@@ -45,30 +53,41 @@
         width: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #ffffff;
+        background: transparent;
       }
       ::-webkit-scrollbar-thumb {
         background: #e4e4e7;
         border-radius: 3px;
       }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #3f3f46;
+      }
       ::-webkit-scrollbar-thumb:hover {
         background: #a1a1aa;
       }
     </style>
-  <script type="importmap">
+    <script>
+      // Initialize theme to avoid flash
+      if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    </script>
+<script type="importmap">
 {
   "imports": {
-    "vite": "https://aistudiocdn.com/vite@^7.2.6",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "vite": "https://aistudiocdn.com/vite@^7.2.6",
     "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1"
   }
 }
 </script>
 </head>
-  <body>
+  <body class="bg-white text-black dark:bg-zinc-950 dark:text-zinc-100 transition-colors duration-300">
     <div id="root"></div>
     <!-- CRITICAL: Entry point for the React App -->
     <script type="module" src="/index.tsx"></script>

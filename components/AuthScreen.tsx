@@ -40,7 +40,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
         e.preventDefault();
         setError('');
         
-        // Validation
         if (isSignUp) {
             if (password !== confirmPassword) {
                 setError("Passwords do not match.");
@@ -70,21 +69,21 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-white px-4 animate-fadeIn">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-zinc-950 px-4 animate-fadeIn transition-colors">
             <div className="mb-10 scale-125">
-                <Logo />
+                <Logo className="dark:text-white" />
             </div>
 
-            <div className="w-full max-w-sm border border-black p-8 shadow-2xl bg-white">
-                <div className="flex mb-8 border-b border-zinc-100">
+            <div className="w-full max-w-sm border border-black dark:border-zinc-700 p-8 shadow-2xl bg-white dark:bg-zinc-900 rounded-sm">
+                <div className="flex mb-8 border-b border-zinc-100 dark:border-zinc-800">
                     <button 
-                        className={`flex-1 pb-4 text-sm font-bold uppercase tracking-widest transition-colors ${!isSignUp ? 'border-b-2 border-black text-black' : 'text-zinc-400'}`}
+                        className={`flex-1 pb-4 text-sm font-bold uppercase tracking-widest transition-colors ${!isSignUp ? 'border-b-2 border-black dark:border-white text-black dark:text-white' : 'text-zinc-400 dark:text-zinc-500'}`}
                         onClick={() => { setIsSignUp(false); setError(''); setPassword(''); setConfirmPassword(''); }}
                     >
                         Sign In
                     </button>
                     <button 
-                        className={`flex-1 pb-4 text-sm font-bold uppercase tracking-widest transition-colors ${isSignUp ? 'border-b-2 border-black text-black' : 'text-zinc-400'}`}
+                        className={`flex-1 pb-4 text-sm font-bold uppercase tracking-widest transition-colors ${isSignUp ? 'border-b-2 border-black dark:border-white text-black dark:text-white' : 'text-zinc-400 dark:text-zinc-500'}`}
                         onClick={() => { setIsSignUp(true); setError(''); setPassword(''); }}
                     >
                         Sign Up
@@ -101,7 +100,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
                             required
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full border border-zinc-200 p-3 outline-none focus:border-black transition-colors"
+                            className="w-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-black dark:text-white p-3 outline-none focus:border-black dark:focus:border-white transition-colors"
                             placeholder="Enter username"
                         />
                     </div>
@@ -116,7 +115,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
                                 required
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full border border-zinc-200 p-3 outline-none focus:border-black transition-colors pr-10"
+                                className="w-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-black dark:text-white p-3 outline-none focus:border-black dark:focus:border-white transition-colors pr-10"
                                 placeholder="Enter password"
                             />
                             <button 
@@ -141,7 +140,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
                                     required
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
-                                    className="w-full border border-zinc-200 p-3 outline-none focus:border-black transition-colors pr-10"
+                                    className="w-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-black dark:text-white p-3 outline-none focus:border-black dark:focus:border-white transition-colors pr-10"
                                     placeholder="Re-enter password"
                                 />
                             </div>
@@ -149,7 +148,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
                     )}
 
                     {error && (
-                        <div className="text-red-600 text-xs font-medium p-2 bg-red-50 border border-red-100">
+                        <div className="text-red-600 dark:text-red-400 text-xs font-medium p-2 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30">
                             {error}
                         </div>
                     )}
@@ -160,9 +159,9 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
                 </form>
             </div>
             
-            <p className="mt-8 text-zinc-400 text-xs text-center max-w-xs leading-relaxed">
+            <p className="mt-8 text-zinc-400 dark:text-zinc-500 text-xs text-center max-w-xs leading-relaxed">
                 {isSignUp 
-                    ? "Your progress is saved securely in your browser." 
+                    ? "Your progress is saved securely." 
                     : "Welcome back. Log in to continue your mastery."}
             </p>
         </div>
