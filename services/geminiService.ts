@@ -117,7 +117,7 @@ export const speakText = async (text: string) => {
                     responseModalities: [Modality.AUDIO],
                     speechConfig: {
                         voiceConfig: {
-                            prebuiltVoiceConfig: { voiceName: 'Kore' }, // Kore is typically the female voice
+                            prebuiltVoiceConfig: { voiceName: 'Kore' }, // Kore is the standard Female voice in Gemini
                         },
                     },
                 },
@@ -153,19 +153,28 @@ const speakNative = (text: string) => {
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = 'en-US';
     
-    // Try to find a female voice or a "Google" voice which is often higher quality
+    // STRICTLY filter for female voices by name
     const voices = window.speechSynthesis.getVoices();
     const preferredVoice = voices.find(v => 
-        (v.name.includes('Female') || v.name.includes('Google US English')) && v.lang.startsWith('en')
+        (
+            v.name.includes('Female') || 
+            v.name.includes('Google US English') || 
+            v.name.includes('Samantha') || 
+            v.name.includes('Victoria') ||
+            v.name.includes('Zira') ||
+            v.name.includes('Susan') ||
+            v.name.includes('Ava')
+        ) 
+        && v.lang.startsWith('en')
     );
     
     if (preferredVoice) {
         utterance.voice = preferredVoice;
     }
     
-    // Make it slightly softer/slower if possible
+    // Make it softer and sweeter
     utterance.rate = 0.9;
-    utterance.pitch = 1.1; 
+    utterance.pitch = 1.15; 
 
     window.speechSynthesis.speak(utterance);
 };

@@ -1,13 +1,17 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
-import { WordGroup, AppView } from './types';
+import { WordGroup, AppView, UserProfile } from './types';
 import { getGroupedData, allWords } from './data';
+import { getCurrentSession, saveUserProgress, signOut, recordMistake } from './services/authService';
 import Button from './components/Button';
 import WordCard from './components/WordCard';
 import Quiz from './components/Quiz';
 import GuidedLearning from './components/GuidedLearning';
 import Logo from './components/Logo';
+import AuthScreen from './components/AuthScreen';
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [view, setView] = useState<AppView>(AppView.HOME);
   const [selectedGroup, setSelectedGroup] = useState<WordGroup | null>(null);
   const [quizResult, setQuizResult] = useState<{score: number, total: number} | null>(null);
@@ -16,38 +20,37 @@ const App: React.FC = () => {
   const [learningIndex, setLearningIndex] = useState(0);
   const [learnedWords, setLearnedWords] = useState<string[]>([]);
   
-  // New: Loading state to prevent "White Screen" during hydration
-  const [isHydrated, setIsHydrated] = useState(false);
+  // Loading state
+  const [checkingSession, setCheckingSession] = useState(true);
 
-  // Load progress from local storage on mount safely
+  // Check for existing session on mount
   useEffect(() => {
-    try {
-      const savedIndex = localStorage?.getItem('gx_learning_index');
-      const savedLearned = localStorage?.getItem('gx_learned_words');
-      
-      if (savedIndex) {
-        setLearningIndex(parseInt(savedIndex, 10) || 0);
-      }
-      
-      if (savedLearned) {
-        setLearnedWords(JSON.parse(savedLearned) || []);
-      }
-    } catch (error) {
-      console.error("Failed to load progress:", error);
-      // Fallback to default state if storage is corrupt
-      setLearningIndex(0);
-      setLearnedWords([]);
-    } finally {
-      setIsHydrated(true);
+    const session = getCurrentSession();
+    if (session) {
+        setUser(session);
+        setLearningIndex(session.learningIndex);
+        setLearnedWords(session.learnedWords);
     }
+    setCheckingSession(false);
   }, []);
 
+  const handleAuthSuccess = (loggedInUser: UserProfile) => {
+      setUser(loggedInUser);
+      setLearningIndex(loggedInUser.learningIndex);
+      setLearnedWords(loggedInUser.learnedWords);
+  };
+
+  const handleSignOut = () => {
+      signOut();
+      setUser(null);
+      setView(AppView.HOME);
+      setLearningIndex(0);
+      setLearnedWords([]);
+  };
+
   const saveProgress = (index: number, learned: string[]) => {
-     try {
-       localStorage?.setItem('gx_learning_index', index.toString());
-       localStorage?.setItem('gx_learned_words', JSON.stringify(learned));
-     } catch (e) {
-       console.error("Save failed", e);
+     if (user) {
+         saveUserProgress(user.username, index, learned);
      }
   };
 
@@ -57,6 +60,19 @@ const App: React.FC = () => {
       setLearningIndex(newIndex);
       setLearnedWords(newLearned);
       saveProgress(newIndex, newLearned);
+  };
+  
+  const handleMistake = (wordId: string) => {
+      if (user) {
+          recordMistake(user.username, wordId);
+          // Update local state to reflect new mistake count immediately if in Mistakes view
+          setUser(prev => {
+              if(!prev) return null;
+              const newMistakes = { ...prev.mistakes };
+              newMistakes[wordId] = (newMistakes[wordId] || 0) + 1;
+              return { ...prev, mistakes: newMistakes };
+          });
+      }
   };
 
   const handleResetProgress = (e: React.MouseEvent) => {
@@ -112,16 +128,70 @@ const App: React.FC = () => {
       <div onClick={goHome} className="cursor-pointer hover:opacity-80 transition-opacity">
         <Logo />
       </div>
-      {view !== AppView.HOME && (
-        <button 
-          onClick={goHome}
-          className="text-xs font-bold uppercase tracking-widest hover:underline"
-        >
-          Home
-        </button>
-      )}
+      <div className="flex items-center gap-4">
+          <span className="hidden md:block text-xs font-bold uppercase tracking-widest text-zinc-400">
+             {user?.username}
+          </span>
+          {view !== AppView.HOME && (
+            <button 
+              onClick={goHome}
+              className="text-xs font-bold uppercase tracking-widest hover:underline"
+            >
+              Home
+            </button>
+          )}
+          <button 
+             onClick={handleSignOut}
+             className="text-xs font-bold uppercase tracking-widest text-red-600 hover:text-red-800"
+          >
+             Sign Out
+          </button>
+      </div>
     </header>
   );
+  
+  const renderMistakes = () => {
+      const mistakeIds = Object.keys(user?.mistakes || {});
+      const mistakeList = mistakeIds
+        .map(id => {
+            const word = allWords.find(w => w.id === id);
+            return word ? { ...word, count: user?.mistakes[id] || 0 } : null;
+        })
+        .filter(w => w !== null)
+        .sort((a,b) => (b?.count || 0) - (a?.count || 0));
+
+      return (
+          <div className="animate-fadeIn pb-20">
+              <div className="mb-8">
+                <h2 className="text-4xl font-serif font-bold mb-2">My Mistakes</h2>
+                <p className="text-zinc-500">Words you have struggled with.</p>
+              </div>
+              
+              {mistakeList.length === 0 ? (
+                  <div className="text-center py-20 bg-zinc-50 border border-dashed border-zinc-300">
+                      <p className="text-xl text-zinc-400 font-serif">You haven't made any mistakes yet.</p>
+                      <p className="text-sm text-zinc-400 mt-2">Keep learning!</p>
+                  </div>
+              ) : (
+                  <div className="space-y-4">
+                      {mistakeList.map((item) => (
+                          <div key={item!.id} className="border border-red-100 bg-red-50/30 p-4 flex justify-between items-center">
+                              <div>
+                                  <div className="flex items-center gap-2">
+                                      <h3 className="text-lg font-bold font-serif">{item!.term}</h3>
+                                      <span className="text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded-full font-bold">
+                                          Missed {item!.count}x
+                                      </span>
+                                  </div>
+                                  <p className="text-zinc-600 mt-1">{item!.meaning}</p>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              )}
+          </div>
+      );
+  };
 
   const renderHome = () => {
     // Calculate progress percentage safely
@@ -176,10 +246,16 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex flex-col md:flex-row gap-4 w-full max-w-md">
-          <Button onClick={handleStartLearn} fullWidth className="h-14 text-lg" variant="secondary">
+          <Button onClick={() => setView(AppView.MISTAKES)} variant="secondary" fullWidth className="h-14 text-lg">
+             My Mistakes ({Object.keys(user?.mistakes || {}).length})
+          </Button>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md opacity-70 hover:opacity-100 transition-opacity">
+          <Button onClick={handleStartLearn} fullWidth variant="outline">
             Browse Groups
           </Button>
-          <Button onClick={handleStartTest} variant="outline" fullWidth className="h-14 text-lg">
+          <Button onClick={handleStartTest} variant="outline" fullWidth>
             Take a Test
           </Button>
         </div>
@@ -279,8 +355,8 @@ const App: React.FC = () => {
     );
   };
 
-  // Prevent rendering until local storage is checked to avoid flashes or crashes
-  if (!isHydrated) {
+  // 1. Checking Session State
+  if (checkingSession) {
       return (
           <div className="min-h-screen bg-white flex items-center justify-center">
                <div className="w-8 h-8 border-4 border-zinc-200 border-t-black rounded-full animate-spin"></div>
@@ -288,6 +364,12 @@ const App: React.FC = () => {
       );
   }
 
+  // 2. Auth State (Not Logged In)
+  if (!user) {
+      return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  // 3. Main App (Logged In)
   return (
     <div className="min-h-screen bg-white text-black px-4 md:px-8 font-sans selection:bg-black selection:text-white">
       <div className="max-w-5xl mx-auto">
@@ -299,11 +381,13 @@ const App: React.FC = () => {
           {view === AppView.GROUP_SELECT_QUIZ && renderGroupSelection('quiz')}
           {view === AppView.LEARN_MODE && renderLearnMode()}
           {view === AppView.QUIZ_MODE && renderQuizMode()}
+          {view === AppView.MISTAKES && renderMistakes()}
           {view === AppView.GUIDED_LEARNING && (
              <GuidedLearning 
                 initialIndex={learningIndex} 
                 learnedWordsIds={learnedWords}
                 onWordComplete={handleWordComplete}
+                onMistake={handleMistake}
                 onExit={goHome}
              />
           )}

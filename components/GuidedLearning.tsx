@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Word, Lesson, LearningQuestion, LearningOption } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Word, Lesson, LearningQuestion } from '../types';
 import { generateLessonContent, generateReviewQuestion, speakText } from '../services/geminiService';
 import { playSuccessSound, playErrorSound } from '../services/audioService';
 import { allWords } from '../data';
@@ -10,6 +10,7 @@ interface GuidedLearningProps {
   initialIndex: number;
   learnedWordsIds: string[];
   onWordComplete: (wordId: string) => void;
+  onMistake: (wordId: string) => void;
   onExit: () => void;
 }
 
@@ -24,74 +25,95 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
   initialIndex, 
   learnedWordsIds, 
   onWordComplete, 
+  onMistake,
   onExit 
 }) => {
-  // State
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [lesson, setLesson] = useState<Lesson | null>(null);
+  const BATCH_SIZE = 10;
   
-  // Interaction State
-  const [step, setStep] = useState<'INTRO' | 'QUIZ'>('INTRO');
-  const [questionIdx, setQuestionIdx] = useState(0);
+  // -- State for flow --
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  
+  // Modes: 'LEARNING' (new word), 'BATCH_REVIEW' (quiz 10 words), 'MISTAKE_CORRECTION' (fixing errors)
+  const [mode, setMode] = useState<'LEARNING' | 'BATCH_REVIEW' | 'MISTAKE_CORRECTION'>('LEARNING');
+  
+  // Data for current word lesson
+  const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [loading, setLoading] = useState(false);
+  
+  // Data for Batch Review / Correction
+  const [reviewQueue, setReviewQueue] = useState<LearningQuestion[]>([]);
+  const [mistakesQueue, setMistakesQueue] = useState<Word[]>([]); // Words to retry
+  
+  // UI Interaction State
+  const [step, setStep] = useState<'INTRO' | 'QUIZ'>('INTRO'); // Only for LEARNING mode
+  const [questionIdx, setQuestionIdx] = useState(0); // For learning queue or review queue
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isChecked, setIsChecked] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+  const [showCorrectionModal, setShowCorrectionModal] = useState(false); // Pop up when wrong in review
 
-  // Load Lesson Logic
-  const loadNextLesson = async () => {
+  // --- Logic 1: Load New Word ---
+  // Accepts an indexOverride to handle the async state update issue in handleNext
+  const loadNewWord = async (indexOverride?: number) => {
     setLoading(true);
-    setError(false);
-    
+    setMode('LEARNING');
     try {
-        const targetWord = allWords[currentIndex];
-        
-        if (!targetWord) {
-            // End of words
-            alert("Congratulations! You have completed all words.");
-            onExit();
-            return;
-        }
-
-        // 1. Generate Main Lesson
-        const mainLesson = await generateLessonContent(targetWord);
-        
-        // 2. Inject Review Questions (Spaced Repetition)
-        // If we have learned enough words, inject a review every few lessons
-        const shouldReview = learnedWordsIds.length > 3 && currentIndex % 3 === 0;
-        
-        if (shouldReview) {
-            // Pick a random previously learned word
-            const reviewId = learnedWordsIds[Math.floor(Math.random() * learnedWordsIds.length)];
-            // Find word object (requires looking up by ID or matching term if ID is index based)
-            // Assuming learnedWordsIds stores the 'id' string from data.ts
-            const reviewWord = allWords.find(w => w.id === reviewId);
-            
-            if (reviewWord) {
-                const reviewQ = await generateReviewQuestion(reviewWord);
-                // Insert review question at random spot after comprehension (index 1 or 2)
-                const insertAt = 1 + Math.floor(Math.random() * (mainLesson.queue.length - 1));
-                mainLesson.queue.splice(insertAt, 0, reviewQ);
-            }
-        }
-
-        setLesson(mainLesson);
-        setStep('INTRO');
-        setQuestionIdx(0);
-        setSelectedOption(null);
-        setIsChecked(false);
-    } catch (e) {
-        console.error("Failed to load lesson", e);
-        setError(true);
+      // Use override if provided, otherwise current state (initial load)
+      const indexToLoad = indexOverride !== undefined ? indexOverride : currentIndex;
+      
+      const targetWord = allWords[indexToLoad];
+      if (!targetWord) {
+        alert("Course Complete!");
+        onExit();
+        return;
+      }
+      
+      const content = await generateLessonContent(targetWord);
+      setLesson(content);
+      setStep('INTRO');
+      setQuestionIdx(0);
+      setSelectedOption(null);
+      setIsChecked(false);
+      
+      // Auto-speak intro word
+      speakText(targetWord.term);
+    } catch(e) {
+      console.error(e);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
+  // --- Logic 2: Trigger Batch Review ---
+  const startBatchReview = async (wordsToReview: Word[]) => {
+      setLoading(true);
+      setMode('BATCH_REVIEW');
+      setMistakesQueue([]); // Clear previous mistakes for this new round
+      
+      try {
+          // Generate 1 question for each word
+          const questions: LearningQuestion[] = [];
+          for (const w of wordsToReview) {
+              const q = await generateReviewQuestion(w);
+              questions.push(q);
+          }
+          setReviewQueue(questions);
+          setQuestionIdx(0);
+          setSelectedOption(null);
+          setIsChecked(false);
+      } catch (e) {
+          console.error(e);
+      } finally {
+          setLoading(false);
+      }
+  };
+
   useEffect(() => {
-    loadNextLesson();
-  }, [currentIndex]);
+    // Initial Load
+    loadNewWord();
+  }, []); // Run once on mount
+
+  // --- Interaction Handlers ---
 
   const handleOptionClick = (optId: string) => {
     if (isChecked) return;
@@ -99,74 +121,141 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
   };
 
   const handleCheck = () => {
-    if (!selectedOption || !lesson) return;
+    if (!selectedOption) return;
     
-    const currentQ = lesson.queue[questionIdx];
+    let currentQ: LearningQuestion;
+    
+    if (mode === 'LEARNING') {
+        if (!lesson) return;
+        currentQ = lesson.queue[questionIdx];
+    } else {
+        currentQ = reviewQueue[questionIdx];
+    }
+    
     const option = currentQ.options.find(o => o.id === selectedOption);
-    
     const correct = !!option?.isCorrect;
     setIsCorrect(correct);
     
-    // Play SFX
     if (correct) {
         playSuccessSound();
     } else {
         playErrorSound();
+        if (mode === 'BATCH_REVIEW' || mode === 'MISTAKE_CORRECTION') {
+             // Record mistake
+             onMistake(currentQ.word.id);
+             // Add to retry queue if not already there
+             setMistakesQueue(prev => {
+                 if (prev.find(w => w.id === currentQ.word.id)) return prev;
+                 return [...prev, currentQ.word];
+             });
+             // Show Correction Modal
+             setShowCorrectionModal(true);
+        }
     }
     
     setIsChecked(true);
   };
 
-  const handleNext = () => {
-    if (!lesson) return;
+  const handleNext = async () => {
+    // 1. LEARNING MODE FLOW
+    if (mode === 'LEARNING') {
+        if (!lesson) return;
+        
+        // Still questions left in this word's lesson
+        if (questionIdx < lesson.queue.length - 1) {
+            setQuestionIdx(prev => prev + 1);
+            setSelectedOption(null);
+            setIsChecked(false);
+            setIsCorrect(false);
+            return;
+        } 
+        
+        // Word Completed
+        onWordComplete(lesson.targetWord.id);
+        const nextIndex = currentIndex + 1;
+        setCurrentIndex(nextIndex); // Update state for UI consistency
 
-    // Move to next question
-    if (questionIdx < lesson.queue.length - 1) {
+        // Check for Batch Review Trigger (Every 10 words)
+        // e.g. Finished word 9 (index 9), next is 10. (10 % 10 === 0).
+        if (nextIndex > 0 && nextIndex % BATCH_SIZE === 0) {
+            // Get last 10 words (indexes start to nextIndex)
+            const start = nextIndex - BATCH_SIZE;
+            const wordsToReview = allWords.slice(start, nextIndex);
+            await startBatchReview(wordsToReview);
+        } else {
+            // Normal Next Word - Pass nextIndex explicitly to avoid stale closure state
+            await loadNewWord(nextIndex); 
+        }
+        return;
+    }
+
+    // 2. BATCH REVIEW / MISTAKE MODE FLOW
+    // If modal is open, user must close it (implemented in modal button)
+    if (showCorrectionModal) {
+        setShowCorrectionModal(false);
+    }
+
+    if (questionIdx < reviewQueue.length - 1) {
         setQuestionIdx(prev => prev + 1);
         setSelectedOption(null);
         setIsChecked(false);
         setIsCorrect(false);
+        return;
+    }
+
+    // End of Review Queue
+    if (mistakesQueue.length === 0) {
+        // SUCCESS: No mistakes left!
+        alert("Batch mastered! Moving to next set.");
+        // We already incremented currentIndex before entering review, so we use currentIndex
+        // However, currentIndex state might be stale in this closure if it wasn't updated in a fresh render cycle.
+        // It's safer to use a ref or just rely on the fact that we updated it before entering review.
+        await loadNewWord(currentIndex);
     } else {
-        // Lesson Complete
-        onWordComplete(lesson.targetWord.id);
-        setCurrentIndex(prev => prev + 1);
-        // Effect will trigger next lesson load
+        // FAIL: Has mistakes. Must retry.
+        alert(`You missed ${mistakesQueue.length} words. Starting correction round.`);
+        setMode('MISTAKE_CORRECTION');
+        // Generate new review queue only for mistakes
+        await startBatchReview(mistakesQueue);
     }
   };
 
-  const handlePronounce = (e: React.MouseEvent, text: string) => {
-    e.stopPropagation();
-    speakText(text);
+
+  // --- Render Helpers ---
+
+  const renderCorrectionModal = () => {
+      const currentQ = reviewQueue[questionIdx];
+      return (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-white p-8 max-w-md w-full rounded-lg text-center">
+                  <span className="text-red-600 font-bold uppercase tracking-widest text-xs mb-2 block">Incorrect</span>
+                  <h2 className="text-3xl font-serif font-bold mb-4">{currentQ.word.term}</h2>
+                  <p className="text-lg text-zinc-600 mb-6">{currentQ.word.meaning}</p>
+                  <Button fullWidth onClick={() => setShowCorrectionModal(false)}>
+                      I understand, let me continue
+                  </Button>
+              </div>
+          </div>
+      );
   };
 
   if (loading) {
       return (
           <div className="flex flex-col items-center justify-center min-h-[60vh] animate-pulse">
               <div className="w-12 h-12 border-4 border-zinc-200 border-t-black rounded-full animate-spin mb-6"></div>
-              <h2 className="text-xl font-serif font-bold">Preparing your lesson...</h2>
-              <p className="text-zinc-500 text-sm mt-2">AI is crafting sentences</p>
+              <h2 className="text-xl font-serif font-bold">
+                  {mode === 'LEARNING' ? 'Preparing Lesson...' : 'Generating Review...'}
+              </h2>
           </div>
       );
   }
 
-  if (error || !lesson) {
-      return (
-          <div className="flex flex-col items-center justify-center min-h-[60vh]">
-              <p className="text-red-600 mb-4">Something went wrong loading the lesson.</p>
-              <div className="flex gap-4">
-                  <Button onClick={() => loadNextLesson()}>Retry</Button>
-                  <Button variant="outline" onClick={onExit}>Exit</Button>
-              </div>
-          </div>
-      );
-  }
-
-  // --- VIEW: INTRO ---
-  if (step === 'INTRO') {
+  // --- RENDER: INTRO (Only for Learning Mode) ---
+  if (mode === 'LEARNING' && step === 'INTRO' && lesson) {
       return (
           <div className="max-w-xl mx-auto py-8 animate-fadeIn">
               <div className="flex justify-between items-center mb-12">
-                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Word {currentIndex + 1} of {allWords.length}</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Word {currentIndex + 1}</span>
                   <button onClick={onExit} className="text-sm underline hover:text-black">Exit</button>
               </div>
 
@@ -175,9 +264,8 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
                   <div className="flex items-center justify-center gap-4">
                     <h1 className="text-6xl font-serif font-black tracking-tight">{lesson.targetWord.term}</h1>
                     <button 
-                        onClick={(e) => handlePronounce(e, lesson.targetWord.term)}
+                        onClick={(e) => { e.stopPropagation(); speakText(lesson.targetWord.term); }}
                         className="p-2 rounded-full hover:bg-zinc-100 text-zinc-400 hover:text-black transition-colors"
-                        title="Pronounce Word"
                     >
                         <SpeakerIcon large />
                     </button>
@@ -193,9 +281,8 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
                         dangerouslySetInnerHTML={{ __html: `"${lesson.intro.exampleSentence}"` }}
                       />
                       <button 
-                         onClick={(e) => handlePronounce(e, lesson.intro.exampleSentence)}
+                         onClick={(e) => { e.stopPropagation(); speakText(lesson.intro.exampleSentence); }}
                          className="text-zinc-300 hover:text-black transition-colors"
-                         title="Read Sentence"
                       >
                           <SpeakerIcon />
                       </button>
@@ -209,24 +296,27 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
       );
   }
 
-  // --- VIEW: QUIZ STEPS ---
-  const currentQ = lesson.queue[questionIdx];
-  const isReview = currentQ.type === 'REVIEW';
+  // --- RENDER: QUIZ (Learning, Review, or Correction) ---
+  const queue = mode === 'LEARNING' ? lesson?.queue : reviewQueue;
+  const currentQ = queue ? queue[questionIdx] : null;
+
+  if (!currentQ) return null;
 
   return (
-      <div className="max-w-xl mx-auto py-8 animate-fadeIn">
-          {/* Progress Bar */}
-          <div className="w-full bg-zinc-100 h-1.5 mb-8 rounded-full overflow-hidden">
-              <div 
-                  className="bg-black h-full transition-all duration-500 ease-out"
-                  style={{ width: `${((questionIdx) / lesson.queue.length) * 100}%` }}
-              ></div>
+      <div className="max-w-xl mx-auto py-8 animate-fadeIn relative">
+          {showCorrectionModal && renderCorrectionModal()}
+
+          {/* Header */}
+          <div className="flex justify-between items-center mb-6">
+               <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                   {mode === 'LEARNING' ? 'Practice' : mode === 'BATCH_REVIEW' ? 'Batch Revision' : 'Correction Round'}
+               </span>
+               <div className="text-xs font-bold bg-black text-white px-2 py-1">
+                   {questionIdx + 1} / {queue?.length}
+               </div>
           </div>
 
           <div className="mb-10 min-h-[160px]">
-               {isReview && (
-                   <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-2 block">Spaced Repetition Review</span>
-               )}
                <h2 className="text-xl font-medium mb-6">{currentQ.questionText}</h2>
                
                <div className="bg-zinc-50 border border-zinc-200 p-6 rounded-lg flex justify-between items-start gap-4">
@@ -235,9 +325,8 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
                         dangerouslySetInnerHTML={{ __html: currentQ.sentence }}
                    />
                    <button 
-                        onClick={(e) => handlePronounce(e, currentQ.sentence)}
+                        onClick={(e) => { e.stopPropagation(); speakText(currentQ.sentence); }}
                         className="text-zinc-300 hover:text-black transition-colors p-1"
-                        title="Read Question"
                    >
                        <SpeakerIcon />
                    </button>
@@ -296,7 +385,7 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
                     variant={isCorrect ? 'primary' : 'secondary'}
                     className={`h-14 text-lg ${isCorrect ? 'bg-green-600 hover:bg-green-700 border-green-600' : 'bg-zinc-800 text-white'}`}
                   >
-                      {isCorrect ? 'Continue' : 'Got it'}
+                      {mode !== 'LEARNING' && !isCorrect ? 'Review Meaning' : 'Continue'}
                   </Button>
               )}
           </div>

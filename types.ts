@@ -20,6 +20,7 @@ export enum AppView {
   LEARN_MODE = 'LEARN_MODE',
   QUIZ_MODE = 'QUIZ_MODE',
   GUIDED_LEARNING = 'GUIDED_LEARNING',
+  MISTAKES = 'MISTAKES',
 }
 
 export enum QuizQuestionType {
@@ -60,4 +61,13 @@ export interface Lesson {
     exampleSentence: string;
   };
   queue: LearningQuestion[];
+}
+
+// --- Auth Types ---
+
+export interface UserProfile {
+  username: string;
+  learningIndex: number;
+  learnedWords: string[];
+  mistakes: Record<string, number>; // wordId -> count of mistakes
 }
