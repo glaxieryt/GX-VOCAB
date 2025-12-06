@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion } from '../types';
 import { allWords } from '../data';
@@ -7,8 +8,7 @@ const getApiKey = () => {
   if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
       return process.env.API_KEY;
   }
-  // Fallback for Vite environments if injected via import.meta (not standard in this setup but safe to have)
-  // or if 'define' plugin handles process.env replacement.
+  // Fallback for Vite environments if injected via import.meta
   return undefined;
 };
 
@@ -26,6 +26,25 @@ const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
             (error) => { clearTimeout(timer); reject(error); }
         );
     });
+};
+
+// --- Helper for Underlining ---
+const highlightWord = (text: string, term: string): string => {
+    if (!text) return "";
+    // If already contains HTML tags for underline, assume it's good (or partially good)
+    if (text.includes('<u>')) return text;
+
+    try {
+        // Escape special regex characters in the term
+        const safeTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Match word boundary, allow for suffixes like 'd', 'ed', 's', 'ing' (basic heuristic)
+        // \w* allows for 'Abate' matching 'Abated'
+        const regex = new RegExp(`\\b${safeTerm}\\w*\\b`, 'gi');
+        
+        return text.replace(regex, (match) => `<u>${match}</u>`);
+    } catch (e) {
+        return text;
+    }
 };
 
 export const getEasyMeaning = async (word: string, meaning: string): Promise<string> => {
@@ -100,10 +119,7 @@ export const generateContextQuizQuestion = async (word: Word, distractors: strin
         sentence = sentence.replace(/`/g, '');
         
         // Ensure underlining if the model forgot
-        if (!sentence.includes("<u>")) {
-            const regex = new RegExp(`\\b${word.term}\\w*\\b`, 'i');
-            sentence = sentence.replace(regex, (match) => `<u>${match}</u>`);
-        }
+        sentence = highlightWord(sentence, word.term);
 
         const options = [...distractors, word.meaning];
         // Shuffle
@@ -140,10 +156,10 @@ export const generateLessonContent = async (word: Word, previousWords: Word[] = 
       
       Output JSON format ONLY:
       {
-        "introSentence": "A clear, simple sentence using the word.",
+        "introSentence": "A clear, simple sentence using the word. Wrap the word ${word.term} in <u> tags.",
         "questions": [
            {
-             "sentence": "A sentence using ${word.term}",
+             "sentence": "A sentence using ${word.term} (wrap word in <u> tags)",
              "correctMeaning": "Correct meaning interpretation",
              "wrongMeaning1": "Wrong meaning 1",
              "wrongMeaning2": "Wrong meaning 2",
@@ -190,7 +206,7 @@ export const generateLessonContent = async (word: Word, previousWords: Word[] = 
             id: `leq_${word.id}_${idx}`,
             type: idx === 0 ? 'COMPREHENSION' : 'PRACTICE',
             word: word,
-            sentence: q.sentence,
+            sentence: highlightWord(q.sentence, word.term),
             questionText: "What does this sentence mean?",
             options: opts
         };
@@ -200,7 +216,7 @@ export const generateLessonContent = async (word: Word, previousWords: Word[] = 
         targetWord: word,
         intro: {
             definition: word.meaning,
-            exampleSentence: data.introSentence || word.sentence || `The word ${word.term} is used in English.`
+            exampleSentence: highlightWord(data.introSentence || word.sentence || `The word ${word.term} is used in English.`, word.term)
         },
         queue: questions
     };
@@ -243,7 +259,7 @@ export const generateReviewQuestion = async (word: Word): Promise<LearningQuesti
             id: `rev_${word.id}_${Date.now()}`,
             type: 'REVIEW',
             word: word,
-            sentence: d.sentence || `${word.term} is the word here.`,
+            sentence: highlightWord(d.sentence || `${word.term} is the word here.`, word.term),
             questionText: `What does "${word.term}" mean in this context?`,
             options: opts
         };
@@ -271,7 +287,7 @@ const generateFallbackLesson = (word: Word): Lesson => {
             id: `fb_${word.id}_${idx}`,
             type: idx === 0 ? 'COMPREHENSION' : 'PRACTICE',
             word: word,
-            sentence: word.sentence || `The word is ${word.term}.`,
+            sentence: highlightWord(word.sentence || `The word is ${word.term}.`, word.term),
             questionText: `What is the definition of ${word.term}?`,
             options: opts
         };
@@ -281,7 +297,7 @@ const generateFallbackLesson = (word: Word): Lesson => {
         targetWord: word,
         intro: {
             definition: word.meaning,
-            exampleSentence: word.sentence || "Example unavailable (Offline Mode)."
+            exampleSentence: highlightWord(word.sentence || "Example unavailable (Offline Mode).", word.term)
         },
         queue: Array.from({length: 3}, (_, i) => fallbackQ(i))
     };
@@ -302,7 +318,7 @@ const generateFallbackReview = (word: Word): LearningQuestion => {
          id: `rev_fb_${word.id}`,
          type: 'REVIEW',
          word: word,
-         sentence: `Review Word: ${word.term}`,
+         sentence: `Review Word: <u>${word.term}</u>`,
          questionText: `What is the definition of ${word.term}?`,
          options: opts
      };
