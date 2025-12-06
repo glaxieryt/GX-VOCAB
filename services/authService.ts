@@ -5,21 +5,12 @@ const USERS_KEY = 'gx_users_db';
 const SESSION_KEY = 'gx_current_session';
 
 // --- SUPABASE CONFIG ---
-// CRITICAL: We must access these directly so Vite's build process can replace the strings
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || (import.meta as any).env?.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY || (import.meta as any).env?.VITE_SUPABASE_KEY || '';
 
 const hasSupabase = !!(SUPABASE_URL && SUPABASE_KEY && SUPABASE_URL.startsWith('http'));
 
-if (!hasSupabase) {
-    console.warn("Supabase keys missing or invalid. Falling back to localStorage (No Cross-Device Sync).");
-} else {
-    console.log("Supabase config found.");
-}
-
 export const getConnectionStatus = () => hasSupabase;
-
-// --- API Helpers ---
 
 const apiHeaders = {
     'apikey': SUPABASE_KEY || '',
@@ -28,7 +19,6 @@ const apiHeaders = {
     'Prefer': 'return=representation'
 };
 
-// --- LocalStorage Fallbacks ---
 const getLocalDB = (): Record<string, any> => {
     try {
         const data = localStorage.getItem(USERS_KEY);
@@ -37,33 +27,26 @@ const getLocalDB = (): Record<string, any> => {
 };
 const saveLocalDB = (db: Record<string, any>) => localStorage.setItem(USERS_KEY, JSON.stringify(db));
 
-
-// --- Auth Functions ---
-
 export const signUp = async (username: string, password: string, isPublic: boolean = true): Promise<UserProfile> => {
     const cleanUser = username.trim().toLowerCase();
     
-    // 1. Validation
     if (!cleanUser || !password) throw "Username and password required.";
 
-    // 2. Supabase Logic
     if (hasSupabase) {
         try {
-            // Check if exists
             const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${cleanUser}`, {
                 method: 'GET', headers: apiHeaders
             });
             const existing = await checkRes.json();
             if (existing && existing.length > 0) throw "Username already taken.";
 
-            // Create
-            // REMOVED srs_state from here to prevent "Column not found" error if DB schema isn't updated
             const newUser = {
                 username: cleanUser,
                 password: password,
                 learning_index: 0,
                 learned_words: [],
                 mistakes: {},
+                xp: 0, // Init XP
                 is_public: isPublic
             };
 
@@ -75,8 +58,7 @@ export const signUp = async (username: string, password: string, isPublic: boole
 
             if (!createRes.ok) {
                 const err = await createRes.json();
-                console.error("Supabase Error:", err);
-                throw err.message || err.error_description || "Error creating account. Ensure database table 'users' exists.";
+                throw err.message || "Error creating account.";
             }
             
             localStorage.setItem(SESSION_KEY, cleanUser);
@@ -85,16 +67,16 @@ export const signUp = async (username: string, password: string, isPublic: boole
                 learningIndex: 0,
                 learnedWords: [],
                 mistakes: {},
+                xp: 0,
                 isPublic: isPublic,
                 srs_state: {}
             };
         } catch (e: any) {
             console.error("SignUp Exception:", e);
-            throw typeof e === 'string' ? e : "Connection error. Check your internet.";
+            throw typeof e === 'string' ? e : "Connection error.";
         }
     }
 
-    // 3. LocalStorage Logic (Fallback)
     const db = getLocalDB();
     if (db[cleanUser]) throw "Username already taken.";
     
@@ -104,6 +86,7 @@ export const signUp = async (username: string, password: string, isPublic: boole
         learningIndex: 0,
         learnedWords: [],
         mistakes: {},
+        xp: 0,
         isPublic: isPublic,
         srs_state: {}
     };
@@ -123,15 +106,10 @@ export const signIn = async (username: string, password: string): Promise<UserPr
                 method: 'GET', headers: apiHeaders
             });
             
-            if (!res.ok) {
-                const err = await res.json();
-                console.error("Supabase Login Error:", err);
-                throw "Database connection error";
-            }
-
+            if (!res.ok) throw "Database connection error";
             const users = await res.json();
             
-            if (!users || users.length === 0) throw "User not found. Please sign up first.";
+            if (!users || users.length === 0) throw "User not found.";
             
             const user = users[0];
             if (user.password !== password) throw "Invalid password.";
@@ -142,16 +120,15 @@ export const signIn = async (username: string, password: string): Promise<UserPr
                 learningIndex: user.learning_index || 0,
                 learnedWords: user.learned_words || [],
                 mistakes: user.mistakes || {},
+                xp: user.xp || 0,
                 isPublic: user.is_public ?? true,
-                srs_state: user.srs_state || {} // Load SRS state so progress bar works
+                srs_state: user.srs_state || {} 
             };
         } catch (e: any) {
-             console.error("SignIn Exception:", e);
-             throw typeof e === 'string' ? e : "Login failed. Please check connection.";
+             throw typeof e === 'string' ? e : "Login failed.";
         }
     }
 
-    // Fallback
     const db = getLocalDB();
     const user = db[cleanUser];
     if (!user) throw "User not found (Offline Mode).";
@@ -182,14 +159,14 @@ export const getCurrentSession = async (): Promise<UserProfile | null> => {
                     learningIndex: user.learning_index || 0,
                     learnedWords: user.learned_words || [],
                     mistakes: user.mistakes || {},
+                    xp: user.xp || 0,
                     isPublic: user.is_public ?? true,
-                    srs_state: user.srs_state || {} // Load SRS state
+                    srs_state: user.srs_state || {}
                 };
             }
         } catch (e) { console.error("Session sync failed", e); }
     }
 
-    // Fallback
     const db = getLocalDB();
     const user = db[username];
     return user ? {
@@ -197,26 +174,31 @@ export const getCurrentSession = async (): Promise<UserProfile | null> => {
         learningIndex: user.learningIndex || 0,
         learnedWords: user.learnedWords || [],
         mistakes: user.mistakes || {},
+        xp: user.xp || 0,
         isPublic: user.isPublic ?? true,
         srs_state: user.srs_state || {}
     } : null;
 };
 
-export const saveUserProgress = async (username: string, learningIndex: number, learnedWords: string[]) => {
+export const saveUserProgress = async (username: string, learningIndex: number, learnedWords: string[], xp?: number) => {
+    const payload: any = {
+        learning_index: learningIndex,
+        learned_words: learnedWords
+    };
+    if (xp !== undefined) payload.xp = xp;
+
     if (hasSupabase) {
         await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
             method: 'PATCH',
             headers: apiHeaders,
-            body: JSON.stringify({
-                learning_index: learningIndex,
-                learned_words: learnedWords
-            })
+            body: JSON.stringify(payload)
         });
     } else {
         const db = getLocalDB();
         if (db[username]) {
             db[username].learningIndex = learningIndex;
             db[username].learnedWords = learnedWords;
+            if (xp !== undefined) db[username].xp = xp;
             saveLocalDB(db);
         }
     }
@@ -225,7 +207,6 @@ export const saveUserProgress = async (username: string, learningIndex: number, 
 export const recordMistake = async (username: string, wordId: string) => {
     if (hasSupabase) {
          try {
-             // 1. Get current
              const getRes = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
                 method: 'GET', headers: apiHeaders
             });
@@ -235,7 +216,6 @@ export const recordMistake = async (username: string, wordId: string) => {
                 const mistakes = user.mistakes || {};
                 mistakes[wordId] = (mistakes[wordId] || 0) + 1;
                 
-                // 2. Patch
                 await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
                     method: 'PATCH',
                     headers: apiHeaders,
@@ -257,8 +237,8 @@ export const recordMistake = async (username: string, wordId: string) => {
 export const getLeaderboard = async (): Promise<{username: string, score: number}[]> => {
     if (hasSupabase) {
         try {
-            // Fetch top 100 users, sorted by learning_index desc
-            const res = await fetch(`${SUPABASE_URL}/rest/v1/users?learning_index=gt.0&select=username,learning_index,is_public&order=learning_index.desc&limit=100`, {
+            // Sort by XP now instead of learning_index
+            const res = await fetch(`${SUPABASE_URL}/rest/v1/users?xp=gt.0&select=username,xp,is_public&order=xp.desc&limit=100`, {
                 method: 'GET', 
                 headers: apiHeaders
             });
@@ -268,41 +248,51 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
             const users = await res.json();
             return users.map((u: any) => ({
                 username: (u.is_public === false) ? "Anonymous" : u.username,
-                score: u.learning_index || 0
+                score: u.xp || 0
             }));
         } catch (e) {
             console.error("Leaderboard error", e);
             return [];
         }
     } else {
-        // Fallback for offline mode
         const db = getLocalDB();
         const users = Object.values(db).map((u: any) => ({
             username: (u.isPublic === false) ? "Anonymous" : u.username,
-            score: u.learningIndex || 0
+            score: u.xp || 0
         })).filter(u => u.score > 0);
         
         return users.sort((a, b) => b.score - a.score).slice(0, 100);
     }
 };
 
-// --- BETA SRS SYNC ---
-
-export const saveSRSState = async (username: string, srsState: Record<string, any>) => {
+export const saveSRSState = async (username: string, srsState: Record<string, any>, addedXp: number = 0) => {
     if (hasSupabase) {
         try {
-            // We still try to patch srs_state here. If column is missing, this request might 400,
-            // but it won't block the main app flow since it's caught.
+            // We need to fetch current XP to add to it, strictly speaking Supabase supports atomic increment via RPC
+            // but for simplicity via REST we assume we might need to get then set or just send the object.
+            // However, to keep it simple and consistent with other functions, we'll try to just patch srs_state.
+            // If we want to add XP, we should ideally fetch current XP first. 
+            // For now, let's assume we pass the *total* XP if we had it, but here we only have *added* XP.
+            // A robust way without RPC is tricky. We'll do a Get-Modify-Set for XP.
+            
+            const getRes = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
+                method: 'GET', headers: apiHeaders
+            });
+            const users = await getRes.json();
+            const currentXp = users[0]?.xp || 0;
+            const newXp = currentXp + addedXp;
+
             await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
                 method: 'PATCH',
                 headers: apiHeaders,
-                body: JSON.stringify({ srs_state: srsState })
+                body: JSON.stringify({ srs_state: srsState, xp: newXp })
             });
-        } catch (e) { console.error("SRS Sync failed (Column likely missing)", e); }
+        } catch (e) { console.error("SRS Sync failed", e); }
     } else {
         const db = getLocalDB();
         if(db[username]) {
             db[username].srs_state = srsState;
+            db[username].xp = (db[username].xp || 0) + addedXp;
             saveLocalDB(db);
         }
     }

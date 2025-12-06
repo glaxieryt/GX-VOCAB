@@ -24,6 +24,7 @@ export enum AppView {
   MISTAKES = 'MISTAKES',
   LEADERBOARD = 'LEADERBOARD',
   BETA_SRS = 'BETA_SRS',
+  MATH_MODE = 'MATH_MODE',
 }
 
 export enum QuizQuestionType {
@@ -35,8 +36,8 @@ export interface QuizQuestion {
   id: string;
   type: QuizQuestionType;
   word: Word;
-  questionText: string; // The sentence or the prompt
-  options: string[]; // 4 options (meanings)
+  questionText: string;
+  options: string[];
   correctOptionIndex: number;
 }
 
@@ -52,8 +53,8 @@ export interface LearningQuestion {
   id: string;
   type: 'COMPREHENSION' | 'PRACTICE' | 'REVIEW';
   word: Word;
-  sentence: string; // The sentence with the word
-  questionText: string; // "What does this sentence mean?"
+  sentence: string;
+  questionText: string;
   options: LearningOption[];
 }
 
@@ -72,7 +73,8 @@ export interface UserProfile {
   username: string;
   learningIndex: number;
   learnedWords: string[];
-  mistakes: Record<string, number>; // wordId -> count of mistakes
+  mistakes: Record<string, number>;
+  xp: number; // Added XP for leaderboard
   isPublic?: boolean;
   srs_state?: Record<string, SRSState>;
 }
@@ -80,9 +82,9 @@ export interface UserProfile {
 // --- ADVANCED BETA TYPES ---
 
 export interface SRSState {
-  interval: number; // Days
-  nextReview: number; // Timestamp
-  easeFactor: number; // Default 2.5
+  interval: number;
+  nextReview: number;
+  easeFactor: number;
   streak: number;
 }
 
@@ -134,4 +136,37 @@ export interface RichVocabularyCard {
     context: string;
   }[];
   exercises: Exercise[];
+}
+
+// --- MATH PROFESSIONAL TYPES ---
+
+export enum MathView {
+  DASHBOARD = 'DASHBOARD',
+  LESSON = 'LESSON',
+  PRACTICE = 'PRACTICE',
+  RESULTS = 'RESULTS'
+}
+
+export enum MathTopic {
+  MULTIPLICATION = 'MULTIPLICATION',
+  POWERS = 'POWERS',
+  ROOTS = 'ROOTS',
+  MIXED = 'MIXED'
+}
+
+export enum DifficultyLevel {
+  BEGINNER = 'BEGINNER',
+  INTERMEDIATE = 'INTERMEDIATE',
+  ADVANCED = 'ADVANCED',
+  EXPERT = 'EXPERT'
+}
+
+export interface MathProblem {
+  id: string;
+  question: string;
+  correctAnswer: number;
+  options: number[]; // Distractors
+  hint: string;
+  explanation: string;
+  difficulty: DifficultyLevel;
 }

@@ -12,6 +12,7 @@ import AuthScreen from './components/AuthScreen';
 import ThemeToggle from './components/ThemeToggle';
 import { getEasyMeaning } from './services/geminiService';
 import BetaSRS from './components/BetaSRS';
+import MathModule from './components/MathModule';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -36,7 +37,6 @@ const App: React.FC = () => {
   const [leaderboard, setLeaderboard] = useState<{username: string, score: number}[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
-  // Check for existing session on mount
   useEffect(() => {
     const initSession = async () => {
         const session = await getCurrentSession();
@@ -53,41 +53,33 @@ const App: React.FC = () => {
   // Text Selection Listener
   useEffect(() => {
     const handleSelection = (e: Event) => {
-        // Delay slightly to let the browser process the selection
         setTimeout(() => {
             const selection = window.getSelection();
             const text = selection?.toString().trim();
             
-            // If clicking inside the popup, don't clear it
-            if ((e.target as HTMLElement).closest('.ask-ai-popup')) {
-                return;
-            }
+            if ((e.target as HTMLElement).closest('.ask-ai-popup')) return;
 
             if (text && text.length > 0 && text.length < 50) {
                 const range = selection?.getRangeAt(0);
                 const rect = range?.getBoundingClientRect();
                 if (rect && rect.width > 0) {
-                    // Position above the selection
                     setAiPopupPosition({
                         top: rect.top + window.scrollY - 60,
                         left: rect.left + window.scrollX + (rect.width / 2)
                     });
                     setSelectedText(text);
-                    // Only reset meaning if it's a new text
                     if (selectedText !== text) {
                          setAiMeaning(null);
                          setLoadingAi(false);
                     }
                 }
             } else {
-                // Clicked away or empty selection
                 setAiPopupPosition(null);
                 setSelectedText(null);
             }
         }, 10);
     };
 
-    // Listeners for mouse, touch, and keyboard selection
     document.addEventListener('mouseup', handleSelection);
     document.addEventListener('touchend', handleSelection); 
     document.addEventListener('keyup', handleSelection);
@@ -113,9 +105,11 @@ const App: React.FC = () => {
       setLearnedWords([]);
   };
 
-  const saveProgress = (index: number, learned: string[]) => {
+  const saveProgress = (index: number, learned: string[], addedXp: number = 0) => {
      if (user) {
-         saveUserProgress(user.username, index, learned);
+         const newTotalXp = (user.xp || 0) + addedXp;
+         saveUserProgress(user.username, index, learned, newTotalXp);
+         setUser(prev => prev ? ({ ...prev, xp: newTotalXp }) : null);
      }
   };
 
@@ -124,7 +118,8 @@ const App: React.FC = () => {
       const newLearned = [...(learnedWords || []), wordId];
       setLearningIndex(newIndex);
       setLearnedWords(newLearned);
-      saveProgress(newIndex, newLearned);
+      // Award 10 XP for learning a new word in Guided mode
+      saveProgress(newIndex, newLearned, 10); 
   };
   
   const handleMistake = (wordId: string) => {
@@ -141,15 +136,15 @@ const App: React.FC = () => {
 
   const handleResetProgress = (e: React.MouseEvent) => {
     e.stopPropagation(); 
-    if (window.confirm("Are you sure you want to reset your progress to zero? This cannot be undone.")) {
+    if (window.confirm("Reset all progress? This clears learned words and resets index to 0. XP will remain.")) {
       setLearningIndex(0);
       setLearnedWords([]);
-      saveProgress(0, []);
+      saveProgress(0, [], 0);
     }
   };
 
   const handleAskAI = async (e: React.MouseEvent) => {
-      e.stopPropagation(); // Prevent clearing selection
+      e.stopPropagation();
       if (!selectedText) return;
       setLoadingAi(true);
       const meaning = await getEasyMeaning(selectedText, "General Vocabulary");
@@ -179,16 +174,13 @@ const App: React.FC = () => {
           alert("You haven't learned any words yet! Complete some daily lessons first.");
           return;
       }
-
       const learnedObjects = allWords.filter(w => user.learnedWords.includes(w.id));
       const shuffled = [...learnedObjects].sort(() => Math.random() - 0.5);
-
       const revisionGroup: WordGroup = {
           id: 'full_revision',
           label: 'Comprehensive Revision',
           words: shuffled
       };
-
       setSelectedGroup(revisionGroup);
       setView(AppView.QUIZ_MODE);
   };
@@ -224,6 +216,10 @@ const App: React.FC = () => {
 
   const handleQuizFinish = (score: number, total: number) => {
     setQuizResult({ score, total });
+    // Award XP based on score (e.g., 1 XP per correct answer in standard quiz)
+    if (score > 0) {
+        saveProgress(learningIndex, learnedWords, score);
+    }
   };
 
   // --- Render Functions ---
@@ -235,14 +231,11 @@ const App: React.FC = () => {
       </div>
       <div className="flex items-center gap-4">
           <ThemeToggle />
-          {view !== AppView.SUBJECT_SELECTION && (
+          {view !== AppView.SUBJECT_SELECTION && view !== AppView.MATH_MODE && (
               <>
-                <button 
-                    onClick={handleShowLeaderboard}
-                    className="text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-black dark:text-zinc-500 dark:hover:text-white"
-                >
-                    Top 100
-                </button>
+                <div className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-500 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-yellow-200 dark:border-yellow-800">
+                    {user?.xp || 0} XP
+                </div>
                 <span className="hidden md:block text-xs font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
                     {user?.username}
                 </span>
@@ -271,30 +264,34 @@ const App: React.FC = () => {
               {/* ENGLISH CARD */}
               <div 
                   onClick={() => setView(AppView.HOME)}
-                  className="group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 shadow-lg hover:shadow-2xl transition-all hover:-translate-y-2 cursor-pointer flex flex-col items-center text-center h-80 justify-center"
+                  className="group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 shadow-lg hover:shadow-2xl transition-all hover:-translate-y-2 cursor-pointer flex flex-col items-center text-center h-80 justify-center relative overflow-hidden"
               >
-                  <span className="text-6xl mb-6 group-hover:scale-110 transition-transform duration-300 block">📚</span>
-                  <h3 className="text-4xl font-serif font-bold mb-3 text-black dark:text-white">English</h3>
-                  <p className="text-zinc-500 dark:text-zinc-400 max-w-xs">
-                      Master 1500+ advanced vocabulary words with AI-powered guided learning.
-                  </p>
-                  <div className="mt-8 text-sm font-bold border-b-2 border-black dark:border-white pb-0.5 group-hover:bg-black dark:group-hover:bg-white group-hover:text-white dark:group-hover:text-black transition-colors duration-200 px-2 text-black dark:text-white">
-                      Enter Class →
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                      <span className="text-6xl mb-6 group-hover:scale-110 transition-transform duration-300 block">📚</span>
+                      <h3 className="text-4xl font-serif font-bold mb-3 text-black dark:text-white">English</h3>
+                      <p className="text-zinc-500 dark:text-zinc-400 max-w-xs">
+                          Master 1500+ advanced vocabulary words with AI-powered guided learning.
+                      </p>
+                  </div>
+                  <div className="w-full mt-4">
+                      <Button fullWidth>Enter Class</Button>
                   </div>
               </div>
 
               {/* MATHS CARD */}
               <div 
-                  onClick={() => alert("Maths module coming soon!")}
-                  className="group bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800/50 rounded-xl p-8 flex flex-col items-center text-center h-80 justify-center cursor-not-allowed opacity-70 grayscale hover:grayscale-0 hover:opacity-100 transition-all"
+                  onClick={() => setView(AppView.MATH_MODE)}
+                  className="group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 shadow-lg hover:shadow-2xl transition-all hover:-translate-y-2 cursor-pointer flex flex-col items-center text-center h-80 justify-center relative overflow-hidden"
               >
-                  <span className="text-6xl mb-6 group-hover:rotate-12 transition-transform duration-300 block">🧮</span>
-                  <h3 className="text-4xl font-serif font-bold mb-3 text-zinc-400 dark:text-zinc-500">Maths</h3>
-                  <p className="text-zinc-400 dark:text-zinc-500 max-w-xs">
-                      Advanced mathematics, calculus, and algebra practice.
-                  </p>
-                  <div className="mt-8 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full">
-                      Coming Soon
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                      <span className="text-6xl mb-6 group-hover:rotate-12 transition-transform duration-300 block">🧮</span>
+                      <h3 className="text-4xl font-serif font-bold mb-3 text-black dark:text-white">Maths</h3>
+                      <p className="text-zinc-500 dark:text-zinc-400 max-w-xs">
+                          Professional platform for mastering multiplication, powers, and roots.
+                      </p>
+                  </div>
+                  <div className="w-full mt-4">
+                      <Button fullWidth>Enter Dojo</Button>
                   </div>
               </div>
           </div>
@@ -302,10 +299,10 @@ const App: React.FC = () => {
   );
   
   const renderLeaderboard = () => (
-      <div className="max-w-2xl mx-auto animate-fadeIn pb-20">
+      <div className="max-w-2xl mx-auto animate-fadeIn pb-20 mt-12 border-t border-zinc-200 dark:border-zinc-800 pt-12">
           <div className="mb-8 text-center">
-              <h2 className="text-4xl font-serif font-bold mb-2 text-black dark:text-white">Leaderboard</h2>
-              <p className="text-zinc-500 dark:text-zinc-400">Top learners by vocabulary mastery.</p>
+              <h2 className="text-4xl font-serif font-bold mb-2 text-black dark:text-white">Global Leaderboard</h2>
+              <p className="text-zinc-500 dark:text-zinc-400">Ranked by total Experience Points (XP)</p>
           </div>
 
           {loadingLeaderboard ? (
@@ -343,7 +340,7 @@ const App: React.FC = () => {
                               </div>
                               <div className="text-right">
                                   <span className="block text-xl font-bold font-serif text-black dark:text-white">{entry.score}</span>
-                                  <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest">Words</span>
+                                  <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-widest">XP</span>
                               </div>
                           </div>
                       );
@@ -352,49 +349,6 @@ const App: React.FC = () => {
           )}
       </div>
   );
-
-  const renderMistakes = () => {
-      const mistakeIds = Object.keys(user?.mistakes || {});
-      const mistakeList = mistakeIds
-        .map(id => {
-            const word = allWords.find(w => w.id === id);
-            return word ? { ...word, count: user?.mistakes[id] || 0 } : null;
-        })
-        .filter(w => w !== null)
-        .sort((a,b) => (b?.count || 0) - (a?.count || 0));
-
-      return (
-          <div className="animate-slideUp pb-20">
-              <div className="mb-8">
-                <h2 className="text-4xl font-serif font-bold mb-2 text-black dark:text-white">My Mistakes</h2>
-                <p className="text-zinc-500 dark:text-zinc-400">Words you have struggled with.</p>
-              </div>
-              
-              {mistakeList.length === 0 ? (
-                  <div className="text-center py-20 bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg">
-                      <p className="text-xl text-zinc-400 font-serif">You haven't made any mistakes yet.</p>
-                      <p className="text-sm text-zinc-400 mt-2">Keep learning!</p>
-                  </div>
-              ) : (
-                  <div className="space-y-4">
-                      {mistakeList.map((item) => (
-                          <div key={item!.id} className="border border-red-100 dark:border-red-900/50 bg-red-50/30 dark:bg-red-900/10 p-4 flex justify-between items-center rounded-lg transition-transform hover:scale-[1.01]">
-                              <div>
-                                  <div className="flex items-center gap-2">
-                                      <h3 className="text-lg font-bold font-serif dark:text-red-50 text-black">{item!.term}</h3>
-                                      <span className="text-[10px] bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 px-2 py-0.5 rounded-full font-bold">
-                                          Missed {item!.count}x
-                                      </span>
-                                  </div>
-                                  <p className="text-zinc-600 dark:text-zinc-300 mt-1">{item!.meaning}</p>
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-              )}
-          </div>
-      );
-  };
 
   const renderHome = () => {
     const totalWords = allWords?.length || 1500;
@@ -412,128 +366,124 @@ const App: React.FC = () => {
         <div className="text-center space-y-4 px-4 mb-4">
           <h2 className="text-5xl md:text-8xl font-serif font-medium tracking-tight text-black dark:text-white animate-slideUp">Master English</h2>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-md mx-auto text-lg font-light animate-slideUp" style={{ animationDelay: '0.1s' }}>
-            Your personalized journey to 1500 advanced vocabulary words.
+            Choose your learning method.
           </p>
         </div>
         
-        {/* ALS BUTTON - TOP POSITION */}
+        {/* ALS BUTTON */}
         <div className="w-full max-w-3xl animate-slideUp" style={{ animationDelay: '0.15s' }}>
              <Button 
                 onClick={() => setView(AppView.BETA_SRS)} 
-                className="w-full h-24 text-xl border-2 border-blue-600 bg-blue-50 text-blue-900 hover:bg-blue-100 hover:border-blue-700 dark:bg-blue-900/20 dark:text-blue-200 dark:border-blue-500 relative overflow-hidden flex flex-col items-center justify-center gap-2 shadow-xl"
+                variant="outline"
+                className="w-full h-32 border-2 border-blue-500 bg-blue-50 text-blue-900 hover:bg-blue-100 hover:text-blue-950 dark:bg-blue-900/30 dark:text-blue-100 dark:border-blue-500/50 dark:hover:bg-blue-900/50 relative overflow-hidden flex flex-col items-center justify-center gap-3 shadow-lg hover:shadow-xl transition-all"
              >
-                <div className="z-10 flex items-center gap-2 font-bold">
-                    🚀 ALS (Advanced Learning System)
+                <div className="z-10 flex items-center gap-2 font-bold text-3xl">
+                    🚀 ALS
                 </div>
-                <div className="w-full max-w-xs h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden z-10">
-                    <div 
-                        className="h-full bg-blue-600 dark:bg-blue-400 transition-all duration-1000 ease-out" 
-                        style={{ width: `${alsProgressPercent}%` }} 
-                    />
-                </div>
-                <span className="text-[10px] uppercase font-bold tracking-widest opacity-70 z-10">
-                    {alsMasteredCount} Mastered / 1500
-                </span>
-             </Button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl animate-slideUp" style={{ animationDelay: '0.2s' }}>
-            {/* Daily Lesson Card */}
-            <div className="border border-black dark:border-zinc-700 p-6 bg-zinc-50 dark:bg-zinc-900 shadow-lg relative overflow-hidden group cursor-pointer transition-all hover:-translate-y-1 rounded-sm flex flex-col justify-between h-64 hover:shadow-2xl" onClick={handleStartGuided}>
-                <div>
-                    <div className="absolute top-0 right-0 bg-black dark:bg-white text-white dark:text-black px-3 py-1 text-[10px] font-bold uppercase tracking-widest">
-                        Guided Path
-                    </div>
-                    <h3 className="text-2xl font-bold font-serif mb-2 text-black dark:text-white">
-                        {learningIndex > 0 ? "Continue Lesson" : "Start Lesson"}
-                    </h3>
-                    <p className="text-zinc-500 dark:text-zinc-400 text-sm">Progressive difficulty with spaced repetition.</p>
-                </div>
+                <div className="text-sm font-normal opacity-80 z-10">Advanced Learning System (Recommended)</div>
                 
-                <div>
-                    <div className="flex justify-between text-xs font-bold uppercase tracking-widest mb-2 text-zinc-400 dark:text-zinc-500">
-                        <span>Progress</span>
-                        <span>{learningIndex} / {totalWords}</span>
-                    </div>
-                    <div className="h-2 bg-zinc-200 dark:bg-zinc-800 w-full rounded-full overflow-hidden mb-4">
+                <div className="w-full max-w-sm flex items-center gap-3 z-10 mt-2">
+                    <div className="flex-1 h-3 bg-blue-200 dark:bg-blue-950/50 rounded-full overflow-hidden border border-blue-300 dark:border-blue-800">
                         <div 
-                            className="h-full bg-black dark:bg-white transition-all duration-1000 ease-out" 
-                            style={{ width: `${progressPercent}%` }} 
+                            className="h-full bg-blue-600 dark:bg-blue-400 transition-all duration-1000 ease-out" 
+                            style={{ width: `${alsProgressPercent}%` }} 
                         />
                     </div>
-                    
-                    <div className="flex justify-between items-end">
-                        {learningIndex > 0 ? (
-                            <button 
-                            onClick={handleResetProgress}
-                            className="text-[10px] text-zinc-400 hover:text-red-600 dark:hover:text-red-400 font-bold uppercase tracking-widest z-10 transition-colors"
-                            >
-                            Reset
-                            </button>
-                        ) : <span></span>}
-                        <span className="text-sm font-bold border-b-2 border-black dark:border-white pb-0.5 group-hover:bg-black dark:group-hover:bg-white group-hover:text-white dark:group-hover:text-black transition-colors duration-200 px-1 text-black dark:text-white">
-                        {learningIndex > 0 ? "Resume →" : "Start →"}
-                        </span>
-                    </div>
+                    <span className="text-xs font-bold uppercase tracking-widest whitespace-nowrap min-w-[100px] text-right">
+                        {alsMasteredCount} / 1500
+                    </span>
                 </div>
-            </div>
-
-            {/* Revision Card */}
-            <div 
-                className={`border border-zinc-200 dark:border-zinc-800 p-6 bg-white dark:bg-zinc-950 shadow-md relative overflow-hidden group transition-all rounded-sm flex flex-col justify-between h-64 ${wordsLearnedCount > 0 ? 'cursor-pointer hover:-translate-y-1 hover:border-black dark:hover:border-white hover:shadow-xl' : 'opacity-60 cursor-not-allowed'}`} 
-                onClick={wordsLearnedCount > 0 ? handleStartRevision : undefined}
-            >
-                <div>
-                    <div className="absolute top-0 right-0 bg-zinc-200 dark:bg-zinc-800 text-black dark:text-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest">
-                        Revision
-                    </div>
-                    <h3 className="text-2xl font-bold font-serif mb-2 text-black dark:text-white">
-                        Full Review
-                    </h3>
-                    <p className="text-zinc-500 dark:text-zinc-400 text-sm">
-                        Test yourself on all {wordsLearnedCount} words you have learned so far.
-                    </p>
-                </div>
-                
-                <div>
-                    <div className="flex items-center gap-3 mb-4">
-                         <div className="text-4xl font-serif font-black text-black dark:text-white">
-                             {wordsLearnedCount}
-                         </div>
-                         <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 leading-tight">
-                             Words<br/>Learned
-                         </div>
-                    </div>
-
-                    <div className="flex justify-end items-end">
-                        <span className="text-sm font-bold border-b-2 border-zinc-300 dark:border-zinc-700 pb-0.5 group-hover:bg-black dark:group-hover:bg-white group-hover:text-white dark:group-hover:text-black transition-colors duration-200 px-1 text-zinc-600 dark:text-zinc-300">
-                        {wordsLearnedCount > 0 ? "Start Revision →" : "Learn words first"}
-                        </span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md animate-slideUp" style={{ animationDelay: '0.28s' }}>
-             <Button onClick={handleShowLeaderboard} variant="outline" fullWidth className="h-14 text-lg border-yellow-600/50 text-yellow-700 dark:text-yellow-500 hover:border-yellow-600">
-                🏆 Leaderboard
              </Button>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md animate-slideUp" style={{ animationDelay: '0.3s' }}>
-          <Button onClick={() => setView(AppView.MISTAKES)} variant="secondary" fullWidth className="h-14 text-lg">
-             My Mistakes ({Object.keys(user?.mistakes || {}).length})
-          </Button>
+        {/* NLS CONTAINER */}
+        <div className="w-full max-w-3xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 p-6 rounded-lg animate-slideUp" style={{ animationDelay: '0.2s' }}>
+            <h3 className="text-center font-bold uppercase tracking-widest text-zinc-400 mb-6">NLS (Normal Learning System)</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Daily Lesson Card */}
+                <div className="border border-black dark:border-zinc-700 p-6 bg-zinc-50 dark:bg-zinc-900 shadow-md relative overflow-hidden group cursor-pointer transition-all hover:-translate-y-1 rounded-sm flex flex-col justify-between h-56 hover:shadow-lg" onClick={handleStartGuided}>
+                    <div>
+                        <h3 className="text-xl font-bold font-serif mb-1 text-black dark:text-white">
+                            {learningIndex > 0 ? "Continue Lesson" : "Start Lesson"}
+                        </h3>
+                        <p className="text-zinc-500 dark:text-zinc-400 text-xs">Standard linear progression.</p>
+                    </div>
+                    
+                    <div>
+                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest mb-1 text-zinc-400 dark:text-zinc-500">
+                            <span>Progress</span>
+                            <span>{learningIndex} / {totalWords}</span>
+                        </div>
+                        <div className="h-1.5 bg-zinc-200 dark:bg-zinc-800 w-full rounded-full overflow-hidden mb-3">
+                            <div 
+                                className="h-full bg-black dark:bg-white transition-all duration-1000 ease-out" 
+                                style={{ width: `${progressPercent}%` }} 
+                            />
+                        </div>
+                        
+                        <div className="flex justify-between items-end">
+                            {learningIndex > 0 ? (
+                                <button 
+                                onClick={handleResetProgress}
+                                className="text-[9px] text-zinc-400 hover:text-red-600 dark:hover:text-red-400 font-bold uppercase tracking-widest z-10 transition-colors"
+                                >
+                                Reset
+                                </button>
+                            ) : <span></span>}
+                            <span className="text-xs font-bold border-b border-black dark:border-white pb-0.5 px-1 text-black dark:text-white">
+                            {learningIndex > 0 ? "Resume →" : "Start →"}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Revision Card */}
+                <div 
+                    className={`border border-zinc-200 dark:border-zinc-800 p-6 bg-white dark:bg-zinc-950 shadow-sm relative overflow-hidden group transition-all rounded-sm flex flex-col justify-between h-56 ${wordsLearnedCount > 0 ? 'cursor-pointer hover:-translate-y-1 hover:border-black dark:hover:border-white hover:shadow-lg' : 'opacity-60 cursor-not-allowed'}`} 
+                    onClick={wordsLearnedCount > 0 ? handleStartRevision : undefined}
+                >
+                    <div>
+                        <h3 className="text-xl font-bold font-serif mb-1 text-black dark:text-white">
+                            Full Review
+                        </h3>
+                        <p className="text-zinc-500 dark:text-zinc-400 text-xs">
+                            Test all {wordsLearnedCount} learned words.
+                        </p>
+                    </div>
+                    
+                    <div>
+                        <div className="flex items-center gap-3 mb-2">
+                             <div className="text-3xl font-serif font-black text-black dark:text-white">
+                                 {wordsLearnedCount}
+                             </div>
+                        </div>
+                        <div className="flex justify-end items-end">
+                            <span className="text-xs font-bold border-b border-zinc-300 dark:border-zinc-700 pb-0.5 px-1 text-zinc-600 dark:text-zinc-300">
+                            Start →
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="mt-6 flex flex-col md:flex-row gap-4">
+               <Button onClick={() => setView(AppView.MISTAKES)} variant="secondary" fullWidth className="h-12 text-sm">
+                  My Mistakes ({Object.keys(user?.mistakes || {}).length})
+               </Button>
+               <Button onClick={handleStartLearn} fullWidth variant="outline" className="h-12 text-sm">
+                  Browse Groups
+               </Button>
+            </div>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md opacity-70 hover:opacity-100 transition-opacity animate-slideUp" style={{ animationDelay: '0.4s' }}>
-          <Button onClick={handleStartLearn} fullWidth variant="outline">
-            Browse Groups
-          </Button>
-          <Button onClick={handleStartTest} variant="outline" fullWidth>
-            Quick Test
-          </Button>
+        {/* Leaderboard Section */}
+        <div className="w-full max-w-3xl animate-slideUp" style={{ animationDelay: '0.3s' }}>
+             <Button onClick={handleShowLeaderboard} variant="outline" fullWidth className="h-16 text-xl border-yellow-600/50 text-yellow-700 dark:text-yellow-500 hover:border-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/10">
+                🏆 View Leaderboard
+             </Button>
         </div>
+
       </div>
     );
   };
@@ -630,8 +580,15 @@ const App: React.FC = () => {
     );
   };
 
+  // --- VIEW ROUTING ---
+
   if (view === AppView.BETA_SRS) {
       return <BetaSRS onExit={goHome} />;
+  }
+
+  // Use the separate Math Module component
+  if (view === AppView.MATH_MODE) {
+      return <MathModule onExit={goSubjectSelection} />;
   }
 
   if (checkingSession) {
@@ -649,7 +606,8 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 text-black dark:text-white px-4 md:px-8 font-sans selection:bg-black selection:text-white dark:selection:bg-white dark:selection:text-black transition-colors duration-300 relative">
       <div className="max-w-5xl mx-auto">
-        {renderHeader()}
+        {/* Only show standard header if NOT in Math Mode or Subject Selection (Math mode handles its own header) */}
+        {view !== AppView.SUBJECT_SELECTION && renderHeader()}
         
         <main className="pb-10">
           {view === AppView.SUBJECT_SELECTION && renderSubjectSelection()}
@@ -658,7 +616,7 @@ const App: React.FC = () => {
           {view === AppView.GROUP_SELECT_QUIZ && renderGroupSelection('quiz')}
           {view === AppView.LEARN_MODE && renderLearnMode()}
           {view === AppView.QUIZ_MODE && renderQuizMode()}
-          {view === AppView.MISTAKES && renderMistakes()}
+          {view === AppView.MISTAKES && <div>{/* Mistakes moved to NLS but kept here for routing compatibility if needed */}</div>}
           {view === AppView.LEADERBOARD && renderLeaderboard()}
           {view === AppView.GUIDED_LEARNING && (
              <GuidedLearning 
@@ -672,8 +630,8 @@ const App: React.FC = () => {
         </main>
       </div>
 
-      {/* Ask AI Context Menu */}
-      {aiPopupPosition && selectedText && (
+      {/* Ask AI Context Menu - Only show if not in Math mode or Subject Selection */}
+      {view !== AppView.SUBJECT_SELECTION && aiPopupPosition && selectedText && (
           <div 
              className="fixed bg-black dark:bg-white text-white dark:text-black rounded-lg shadow-2xl p-4 w-72 animate-popIn ask-ai-popup"
              style={{ 
@@ -708,7 +666,6 @@ const App: React.FC = () => {
                   </button>
               )}
               
-              {/* Arrow */}
               <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 bg-black dark:bg-white rotate-45"></div>
           </div>
       )}
