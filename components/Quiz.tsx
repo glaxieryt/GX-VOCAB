@@ -99,10 +99,12 @@ const Quiz: React.FC<QuizProps> = ({ group, onFinish, onExit }) => {
   return (
     <div className="max-w-xl mx-auto pt-8 animate-fadeIn">
       <div className="flex justify-between items-center mb-8">
+        <Button onClick={onExit} variant="secondary" className="px-3 py-1.5 h-auto text-xs">
+            ← Go Back
+        </Button>
         <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">
           Question {currentIndex + 1} / {questions.length}
         </span>
-        <button onClick={onExit} className="text-sm underline hover:text-zinc-600 dark:hover:text-zinc-300">Exit</button>
       </div>
 
       <div className="mb-10 min-h-[200px] flex flex-col justify-center relative">

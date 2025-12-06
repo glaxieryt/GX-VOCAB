@@ -204,8 +204,14 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
       return (
           <div className="max-w-xl mx-auto py-8 animate-fadeIn">
               <div className="flex justify-between items-center mb-12">
+                  <Button 
+                    onClick={onExit} 
+                    variant="secondary" 
+                    className="px-4 py-2 h-auto text-xs"
+                  >
+                    ← Go Back
+                  </Button>
                   <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Word {currentIndex + 1}</span>
-                  <button onClick={onExit} className="text-sm underline hover:text-black dark:hover:text-white dark:text-zinc-400">Exit</button>
               </div>
 
               <div className="text-center mb-12 space-y-6">
@@ -255,9 +261,18 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
           {showCorrectionModal && renderCorrectionModal()}
 
           <div className="flex justify-between items-center mb-6">
-               <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-                   {mode === 'LEARNING' ? 'Practice' : mode === 'BATCH_REVIEW' ? 'Batch Revision' : 'Correction Round'}
-               </span>
+               <div className="flex items-center gap-4">
+                   <Button 
+                        onClick={onExit} 
+                        variant="secondary" 
+                        className="px-3 py-1.5 h-auto text-xs"
+                   >
+                        ← Back
+                   </Button>
+                   <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                       {mode === 'LEARNING' ? 'Practice' : mode === 'BATCH_REVIEW' ? 'Batch Revision' : 'Correction Round'}
+                   </span>
+               </div>
                <div className="text-xs font-bold bg-black text-white dark:bg-white dark:text-black px-2 py-1">
                    {questionIdx + 1} / {queue?.length}
                </div>

@@ -188,7 +188,7 @@ const MathDashboard: React.FC<{ onSelectTopic: (topic: MathTopic) => void; onExi
 
 // --- PRACTICE MODE ---
 
-const PracticeSession: React.FC<{ topic: MathTopic; onFinish: () => void }> = ({ topic, onFinish }) => {
+const PracticeSession: React.FC<{ topic: MathTopic; onFinish: () => void; onEarnXP: (amount: number) => void }> = ({ topic, onFinish, onEarnXP }) => {
     const [difficulty, setDifficulty] = useState<DifficultyLevel>(DifficultyLevel.BEGINNER);
     const [questionIdx, setQuestionIdx] = useState(0);
     const [currentProblem, setCurrentProblem] = useState<MathProblem>(generateProblem(topic, DifficultyLevel.BEGINNER));
@@ -226,7 +226,11 @@ const PracticeSession: React.FC<{ topic: MathTopic; onFinish: () => void }> = ({
         if (selectedOption === null) return;
         const correct = selectedOption === currentProblem.correctAnswer;
         setIsCorrect(correct);
-        if (correct) setScore(prev => prev + 1);
+        if (correct) {
+            setScore(prev => prev + 1);
+            // Award 10 XP for correct answer
+            onEarnXP(10);
+        }
         setIsAnswered(true);
     };
 
@@ -234,7 +238,9 @@ const PracticeSession: React.FC<{ topic: MathTopic; onFinish: () => void }> = ({
         <div className="max-w-3xl mx-auto p-6 animate-fadeIn min-h-screen flex flex-col">
             <div className="flex justify-between items-center mb-8">
                 <div className="flex items-center gap-4">
-                    <button onClick={onFinish} className="text-slate-400 hover:text-slate-600">✕ Exit</button>
+                    <PButton onClick={onFinish} variant="ghost" className="text-slate-500 hover:text-slate-800">
+                        ← Go Back
+                    </PButton>
                     <div className="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold text-slate-500 uppercase tracking-wide">
                         {topic} • {difficulty}
                     </div>
@@ -322,7 +328,7 @@ const PracticeSession: React.FC<{ topic: MathTopic; onFinish: () => void }> = ({
 
 // --- MAIN CONTROLLER ---
 
-const MathModule: React.FC<{ onExit: () => void }> = ({ onExit }) => {
+const MathModule: React.FC<{ onExit: () => void; onEarnXP: (amount: number) => void }> = ({ onExit, onEarnXP }) => {
     const [view, setView] = useState<MathView>(MathView.DASHBOARD);
     const [topic, setTopic] = useState<MathTopic | null>(null);
 
@@ -332,7 +338,7 @@ const MathModule: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     };
 
     if (view === MathView.PRACTICE && topic) {
-        return <PracticeSession topic={topic} onFinish={() => setView(MathView.DASHBOARD)} />;
+        return <PracticeSession topic={topic} onFinish={() => setView(MathView.DASHBOARD)} onEarnXP={onEarnXP} />;
     }
 
     return (

@@ -79,6 +79,7 @@ async function decodeAudioData(
 }
 
 export const speakText = async (text: string) => {
+    // If no API key, immediately fallback without error
     if (!ai) {
         speakNative(text);
         return;
@@ -130,31 +131,41 @@ export const speakText = async (text: string) => {
         source.connect(audioContext.destination);
         source.start();
 
-    } catch (error) {
-        console.error("Gemini TTS Failed, falling back to browser:", error);
+    } catch (error: any) {
+        // Handle Rate Limit (429) specifically to avoid scary logs
+        if (error?.message?.includes('429') || error?.status === 429) {
+            console.warn("Gemini TTS Quota Exceeded. Falling back to native speech.");
+        } else {
+            console.error("Gemini TTS Failed (Fallback active):", error);
+        }
+        // Always fallback
         speakNative(text);
     }
 };
 
 const speakNative = (text: string) => {
-    const cleanText = text.replace(/<[^>]*>/g, '');
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = 'en-US';
-    
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(v => 
-        (v.name.includes('Female') || v.name.includes('Google US English') || v.name.includes('Samantha') || v.name.includes('Zira')) 
-        && v.lang.startsWith('en')
-    );
-    
-    if (preferredVoice) {
-        utterance.voice = preferredVoice;
-    }
-    
-    utterance.rate = 0.9;
-    utterance.pitch = 1.15; 
+    try {
+        const cleanText = text.replace(/<[^>]*>/g, '');
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.lang = 'en-US';
+        
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(v => 
+            (v.name.includes('Female') || v.name.includes('Google US English') || v.name.includes('Samantha') || v.name.includes('Zira')) 
+            && v.lang.startsWith('en')
+        );
+        
+        if (preferredVoice) {
+            utterance.voice = preferredVoice;
+        }
+        
+        utterance.rate = 0.9;
+        utterance.pitch = 1.15; 
 
-    window.speechSynthesis.speak(utterance);
+        window.speechSynthesis.speak(utterance);
+    } catch (e) {
+        console.error("Native TTS failed", e);
+    }
 };
 
 
@@ -430,12 +441,6 @@ export const generateRichVocabularyData = async (word: Word): Promise<RichVocabu
 export const generateWordImage = async (visualDescription: string): Promise<string | null> => {
     if (!ai) return null;
     try {
-        // Use gemini-2.5-flash-image as requested in system rules
-        // Note: For image GENERATION, usually models like imagen-3.0-generate-001 are used.
-        // However, user instructions explicitly asked to use 'gemini-2.5-flash-image' 
-        // We will attempt to use it as instructed. 
-        // If it's a multimodal input model only, it might not output inlineData.
-        
         const response = await withTimeout<GenerateContentResponse>(
             ai.models.generateContent({
                 model: 'gemini-2.5-flash-image', 
@@ -444,7 +449,6 @@ export const generateWordImage = async (visualDescription: string): Promise<stri
             15000
         );
 
-        // Check for image parts in response
         if (response.candidates?.[0]?.content?.parts) {
             for (const part of response.candidates[0].content.parts) {
                 if (part.inlineData && part.inlineData.mimeType.startsWith('image')) {

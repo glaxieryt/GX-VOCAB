@@ -134,6 +134,12 @@ const App: React.FC = () => {
       }
   };
 
+  const handleEarnXP = (amount: number) => {
+      if (user) {
+          saveProgress(learningIndex, learnedWords, amount);
+      }
+  };
+
   const handleResetProgress = (e: React.MouseEvent) => {
     e.stopPropagation(); 
     if (window.confirm("Reset all progress? This clears learned words and resets index to 0. XP will remain.")) {
@@ -231,15 +237,10 @@ const App: React.FC = () => {
       </div>
       <div className="flex items-center gap-4">
           <ThemeToggle />
-          {view !== AppView.SUBJECT_SELECTION && view !== AppView.MATH_MODE && (
-              <>
-                <div className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-500 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-yellow-200 dark:border-yellow-800">
-                    {user?.xp || 0} XP
-                </div>
-                <span className="hidden md:block text-xs font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
-                    {user?.username}
-                </span>
-              </>
+          {view !== AppView.SUBJECT_SELECTION && (
+              <span className="hidden md:block text-xs font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
+                  {user?.username}
+              </span>
           )}
           <button 
              onClick={handleSignOut}
@@ -250,6 +251,18 @@ const App: React.FC = () => {
       </div>
     </header>
   );
+
+  const FloatingXPBar = () => {
+      if (!user) return null;
+      return (
+          <div className="fixed top-4 right-4 z-[60] flex items-center gap-2 animate-fadeIn pointer-events-none">
+              <div className="bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-400 px-4 py-2 rounded-full text-sm font-black uppercase tracking-widest border-2 border-yellow-300 dark:border-yellow-700 shadow-xl flex items-center gap-2 transform transition-all duration-300 hover:scale-105">
+                  <span className="text-lg">⚡</span>
+                  {user.xp || 0} XP
+              </div>
+          </div>
+      );
+  };
   
   const renderSubjectSelection = () => (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-12 animate-fadeIn pb-12">
@@ -580,17 +593,6 @@ const App: React.FC = () => {
     );
   };
 
-  // --- VIEW ROUTING ---
-
-  if (view === AppView.BETA_SRS) {
-      return <BetaSRS onExit={goHome} />;
-  }
-
-  // Use the separate Math Module component
-  if (view === AppView.MATH_MODE) {
-      return <MathModule onExit={goSubjectSelection} />;
-  }
-
   if (checkingSession) {
       return (
           <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center">
@@ -603,11 +605,16 @@ const App: React.FC = () => {
       return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
   }
 
+  // --- GLOBAL RENDER ---
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 text-black dark:text-white px-4 md:px-8 font-sans selection:bg-black selection:text-white dark:selection:bg-white dark:selection:text-black transition-colors duration-300 relative">
+      
+      {/* Floating XP Bar - Always visible */}
+      <FloatingXPBar />
+
       <div className="max-w-5xl mx-auto">
-        {/* Only show standard header if NOT in Math Mode or Subject Selection (Math mode handles its own header) */}
-        {view !== AppView.SUBJECT_SELECTION && renderHeader()}
+        {/* Header - Hidden in Math Mode and Subject Selection */}
+        {view !== AppView.SUBJECT_SELECTION && view !== AppView.MATH_MODE && renderHeader()}
         
         <main className="pb-10">
           {view === AppView.SUBJECT_SELECTION && renderSubjectSelection()}
@@ -616,7 +623,7 @@ const App: React.FC = () => {
           {view === AppView.GROUP_SELECT_QUIZ && renderGroupSelection('quiz')}
           {view === AppView.LEARN_MODE && renderLearnMode()}
           {view === AppView.QUIZ_MODE && renderQuizMode()}
-          {view === AppView.MISTAKES && <div>{/* Mistakes moved to NLS but kept here for routing compatibility if needed */}</div>}
+          {view === AppView.MISTAKES && <div></div>}
           {view === AppView.LEADERBOARD && renderLeaderboard()}
           {view === AppView.GUIDED_LEARNING && (
              <GuidedLearning 
@@ -627,11 +634,27 @@ const App: React.FC = () => {
                 onExit={goHome}
              />
           )}
+          
+          {/* SPECIAL FULL-SCREEN MODES */}
+          {/* Note: In a real app, we might use React Portal or proper routing */}
         </main>
       </div>
 
-      {/* Ask AI Context Menu - Only show if not in Math mode or Subject Selection */}
-      {view !== AppView.SUBJECT_SELECTION && aiPopupPosition && selectedText && (
+      {/* Beta & Math Modules take over the screen but we still render them here to share context */}
+      {view === AppView.BETA_SRS && (
+          <div className="fixed inset-0 z-40 overflow-y-auto bg-zinc-50 dark:bg-zinc-950">
+              <BetaSRS onExit={goHome} />
+          </div>
+      )}
+
+      {view === AppView.MATH_MODE && (
+          <div className="fixed inset-0 z-40 overflow-y-auto bg-slate-50">
+              <MathModule onExit={goSubjectSelection} onEarnXP={handleEarnXP} />
+          </div>
+      )}
+
+      {/* Ask AI Context Menu */}
+      {view !== AppView.SUBJECT_SELECTION && view !== AppView.MATH_MODE && view !== AppView.BETA_SRS && aiPopupPosition && selectedText && (
           <div 
              className="fixed bg-black dark:bg-white text-white dark:text-black rounded-lg shadow-2xl p-4 w-72 animate-popIn ask-ai-popup"
              style={{ 
