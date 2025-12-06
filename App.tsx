@@ -15,7 +15,7 @@ import BetaSRS from './components/BetaSRS';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [view, setView] = useState<AppView>(AppView.HOME);
+  const [view, setView] = useState<AppView>(AppView.SUBJECT_SELECTION);
   const [selectedGroup, setSelectedGroup] = useState<WordGroup | null>(null);
   const [quizResult, setQuizResult] = useState<{score: number, total: number} | null>(null);
 
@@ -108,7 +108,7 @@ const App: React.FC = () => {
   const handleSignOut = () => {
       signOut();
       setUser(null);
-      setView(AppView.HOME);
+      setView(AppView.SUBJECT_SELECTION);
       setLearningIndex(0);
       setLearnedWords([]);
   };
@@ -215,6 +215,12 @@ const App: React.FC = () => {
     setSelectedGroup(null);
     setQuizResult(null);
   };
+  
+  const goSubjectSelection = () => {
+      setView(AppView.SUBJECT_SELECTION);
+      setSelectedGroup(null);
+      setQuizResult(null);
+  };
 
   const handleQuizFinish = (score: number, total: number) => {
     setQuizResult({ score, total });
@@ -224,20 +230,24 @@ const App: React.FC = () => {
 
   const renderHeader = () => (
     <header className="border-b border-zinc-200 dark:border-zinc-800 py-5 mb-8 flex justify-between items-center bg-white dark:bg-zinc-950 sticky top-0 z-30 px-4 md:px-0 transition-colors">
-      <div onClick={goHome} className="cursor-pointer hover:opacity-80 transition-opacity">
+      <div onClick={goSubjectSelection} className="cursor-pointer hover:opacity-80 transition-opacity">
         <Logo />
       </div>
       <div className="flex items-center gap-4">
           <ThemeToggle />
-          <button 
-             onClick={handleShowLeaderboard}
-             className="text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-black dark:text-zinc-500 dark:hover:text-white"
-          >
-             Top 100
-          </button>
-          <span className="hidden md:block text-xs font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
-             {user?.username}
-          </span>
+          {view !== AppView.SUBJECT_SELECTION && (
+              <>
+                <button 
+                    onClick={handleShowLeaderboard}
+                    className="text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-black dark:text-zinc-500 dark:hover:text-white"
+                >
+                    Top 100
+                </button>
+                <span className="hidden md:block text-xs font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-600">
+                    {user?.username}
+                </span>
+              </>
+          )}
           <button 
              onClick={handleSignOut}
              className="text-xs font-bold uppercase tracking-widest text-red-600 hover:text-red-500"
@@ -246,6 +256,49 @@ const App: React.FC = () => {
           </button>
       </div>
     </header>
+  );
+  
+  const renderSubjectSelection = () => (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-12 animate-fadeIn pb-12">
+          <div className="text-center space-y-4 px-4 mb-4">
+              <h2 className="text-5xl md:text-7xl font-serif font-medium tracking-tight text-black dark:text-white animate-slideUp">Choose Your Path</h2>
+              <p className="text-zinc-500 dark:text-zinc-400 max-w-md mx-auto text-lg font-light animate-slideUp" style={{ animationDelay: '0.1s' }}>
+                  What would you like to master today?
+              </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl px-4 animate-slideUp" style={{ animationDelay: '0.2s' }}>
+              {/* ENGLISH CARD */}
+              <div 
+                  onClick={() => setView(AppView.HOME)}
+                  className="group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 shadow-lg hover:shadow-2xl transition-all hover:-translate-y-2 cursor-pointer flex flex-col items-center text-center h-80 justify-center"
+              >
+                  <span className="text-6xl mb-6 group-hover:scale-110 transition-transform duration-300 block">📚</span>
+                  <h3 className="text-4xl font-serif font-bold mb-3 text-black dark:text-white">English</h3>
+                  <p className="text-zinc-500 dark:text-zinc-400 max-w-xs">
+                      Master 1500+ advanced vocabulary words with AI-powered guided learning.
+                  </p>
+                  <div className="mt-8 text-sm font-bold border-b-2 border-black dark:border-white pb-0.5 group-hover:bg-black dark:group-hover:bg-white group-hover:text-white dark:group-hover:text-black transition-colors duration-200 px-2 text-black dark:text-white">
+                      Enter Class →
+                  </div>
+              </div>
+
+              {/* MATHS CARD */}
+              <div 
+                  onClick={() => alert("Maths module coming soon!")}
+                  className="group bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800/50 rounded-xl p-8 flex flex-col items-center text-center h-80 justify-center cursor-not-allowed opacity-70 grayscale hover:grayscale-0 hover:opacity-100 transition-all"
+              >
+                  <span className="text-6xl mb-6 group-hover:rotate-12 transition-transform duration-300 block">🧮</span>
+                  <h3 className="text-4xl font-serif font-bold mb-3 text-zinc-400 dark:text-zinc-500">Maths</h3>
+                  <p className="text-zinc-400 dark:text-zinc-500 max-w-xs">
+                      Advanced mathematics, calculus, and algebra practice.
+                  </p>
+                  <div className="mt-8 bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full">
+                      Coming Soon
+                  </div>
+              </div>
+          </div>
+      </div>
   );
   
   const renderLeaderboard = () => (
@@ -347,16 +400,43 @@ const App: React.FC = () => {
     const totalWords = allWords?.length || 1500;
     const progressPercent = Math.min(((learningIndex || 0) / totalWords) * 100, 100);
     const wordsLearnedCount = learnedWords?.length || 0;
+    
+    // Calculate ALS Mastery
+    const alsMasteredCount = user?.srs_state 
+        ? Object.values(user.srs_state).filter((s: any) => s.interval > 21).length 
+        : 0;
+    const alsProgressPercent = Math.min((alsMasteredCount / 1500) * 100, 100);
 
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-12 animate-fadeIn pb-12">
-        <div className="text-center space-y-4 px-4">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8 animate-fadeIn pb-12">
+        <div className="text-center space-y-4 px-4 mb-4">
           <h2 className="text-5xl md:text-8xl font-serif font-medium tracking-tight text-black dark:text-white animate-slideUp">Master English</h2>
           <p className="text-zinc-500 dark:text-zinc-400 max-w-md mx-auto text-lg font-light animate-slideUp" style={{ animationDelay: '0.1s' }}>
             Your personalized journey to 1500 advanced vocabulary words.
           </p>
         </div>
         
+        {/* ALS BUTTON - TOP POSITION */}
+        <div className="w-full max-w-3xl animate-slideUp" style={{ animationDelay: '0.15s' }}>
+             <Button 
+                onClick={() => setView(AppView.BETA_SRS)} 
+                className="w-full h-24 text-xl border-2 border-blue-600 bg-blue-50 text-blue-900 hover:bg-blue-100 hover:border-blue-700 dark:bg-blue-900/20 dark:text-blue-200 dark:border-blue-500 relative overflow-hidden flex flex-col items-center justify-center gap-2 shadow-xl"
+             >
+                <div className="z-10 flex items-center gap-2 font-bold">
+                    🚀 ALS (Advanced Learning System)
+                </div>
+                <div className="w-full max-w-xs h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden z-10">
+                    <div 
+                        className="h-full bg-blue-600 dark:bg-blue-400 transition-all duration-1000 ease-out" 
+                        style={{ width: `${alsProgressPercent}%` }} 
+                    />
+                </div>
+                <span className="text-[10px] uppercase font-bold tracking-widest opacity-70 z-10">
+                    {alsMasteredCount} Mastered / 1500
+                </span>
+             </Button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl animate-slideUp" style={{ animationDelay: '0.2s' }}>
             {/* Daily Lesson Card */}
             <div className="border border-black dark:border-zinc-700 p-6 bg-zinc-50 dark:bg-zinc-900 shadow-lg relative overflow-hidden group cursor-pointer transition-all hover:-translate-y-1 rounded-sm flex flex-col justify-between h-64 hover:shadow-2xl" onClick={handleStartGuided}>
@@ -432,12 +512,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
             </div>
-        </div>
-        
-        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md animate-slideUp" style={{ animationDelay: '0.25s' }}>
-             <Button onClick={() => setView(AppView.BETA_SRS)} className="h-14 text-lg border-2 border-blue-600 bg-blue-50 text-blue-800 hover:bg-blue-100 hover:border-blue-700 dark:bg-blue-900/20 dark:text-blue-200 dark:border-blue-500">
-                🚀 Beta Version (SRS)
-             </Button>
         </div>
 
         <div className="flex flex-col md:flex-row gap-4 w-full max-w-md animate-slideUp" style={{ animationDelay: '0.28s' }}>
@@ -578,6 +652,7 @@ const App: React.FC = () => {
         {renderHeader()}
         
         <main className="pb-10">
+          {view === AppView.SUBJECT_SELECTION && renderSubjectSelection()}
           {view === AppView.HOME && renderHome()}
           {view === AppView.GROUP_SELECT_LEARN && renderGroupSelection('learn')}
           {view === AppView.GROUP_SELECT_QUIZ && renderGroupSelection('quiz')}

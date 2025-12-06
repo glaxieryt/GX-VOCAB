@@ -14,6 +14,7 @@ export interface WordGroup {
 }
 
 export enum AppView {
+  SUBJECT_SELECTION = 'SUBJECT_SELECTION',
   HOME = 'HOME',
   GROUP_SELECT_LEARN = 'GROUP_SELECT_LEARN',
   GROUP_SELECT_QUIZ = 'GROUP_SELECT_QUIZ',

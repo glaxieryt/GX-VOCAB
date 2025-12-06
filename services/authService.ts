@@ -5,11 +5,7 @@ const USERS_KEY = 'gx_users_db';
 const SESSION_KEY = 'gx_current_session';
 
 // --- SUPABASE CONFIG ---
-// CRITICAL: We must access these directly (not via a helper function with dynamic keys)
-// so that Vite's build process can replace the strings 'process.env.VITE_SUPABASE_URL' with the actual values.
-
-// 1. Try process.env (Injected by vite.config.ts define for Vercel)
-// 2. Try import.meta.env (Standard Vite for local dev)
+// CRITICAL: We must access these directly so Vite's build process can replace the strings
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || (import.meta as any).env?.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY || (import.meta as any).env?.VITE_SUPABASE_KEY || '';
 
@@ -32,7 +28,7 @@ const apiHeaders = {
     'Prefer': 'return=representation'
 };
 
-// --- LocalStorage Fallbacks (Same logic as before) ---
+// --- LocalStorage Fallbacks ---
 const getLocalDB = (): Record<string, any> => {
     try {
         const data = localStorage.getItem(USERS_KEY);
@@ -89,7 +85,8 @@ export const signUp = async (username: string, password: string, isPublic: boole
                 learningIndex: 0,
                 learnedWords: [],
                 mistakes: {},
-                isPublic: isPublic
+                isPublic: isPublic,
+                srs_state: {}
             };
         } catch (e: any) {
             console.error("SignUp Exception:", e);
@@ -107,7 +104,8 @@ export const signUp = async (username: string, password: string, isPublic: boole
         learningIndex: 0,
         learnedWords: [],
         mistakes: {},
-        isPublic: isPublic
+        isPublic: isPublic,
+        srs_state: {}
     };
     db[cleanUser] = newUser;
     saveLocalDB(db);
@@ -144,7 +142,8 @@ export const signIn = async (username: string, password: string): Promise<UserPr
                 learningIndex: user.learning_index || 0,
                 learnedWords: user.learned_words || [],
                 mistakes: user.mistakes || {},
-                isPublic: user.is_public ?? true
+                isPublic: user.is_public ?? true,
+                srs_state: user.srs_state || {} // Load SRS state so progress bar works
             };
         } catch (e: any) {
              console.error("SignIn Exception:", e);
@@ -183,7 +182,8 @@ export const getCurrentSession = async (): Promise<UserProfile | null> => {
                     learningIndex: user.learning_index || 0,
                     learnedWords: user.learned_words || [],
                     mistakes: user.mistakes || {},
-                    isPublic: user.is_public ?? true
+                    isPublic: user.is_public ?? true,
+                    srs_state: user.srs_state || {} // Load SRS state
                 };
             }
         } catch (e) { console.error("Session sync failed", e); }
@@ -197,7 +197,8 @@ export const getCurrentSession = async (): Promise<UserProfile | null> => {
         learningIndex: user.learningIndex || 0,
         learnedWords: user.learnedWords || [],
         mistakes: user.mistakes || {},
-        isPublic: user.isPublic ?? true
+        isPublic: user.isPublic ?? true,
+        srs_state: user.srs_state || {}
     } : null;
 };
 

@@ -12,7 +12,7 @@ const Logo: React.FC<{ className?: string }> = ({ className = "" }) => {
       </div>
       <div className="flex flex-col justify-center h-8">
           <span className="text-xl font-serif font-black tracking-tighter leading-none">
-            GX VOCAB
+            GX EDUCATION
           </span>
       </div>
     </div>
