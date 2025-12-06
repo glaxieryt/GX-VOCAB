@@ -44,7 +44,7 @@ const saveLocalDB = (db: Record<string, any>) => localStorage.setItem(USERS_KEY,
 
 // --- Auth Functions ---
 
-export const signUp = async (username: string, password: string): Promise<UserProfile> => {
+export const signUp = async (username: string, password: string, isPublic: boolean = true): Promise<UserProfile> => {
     const cleanUser = username.trim().toLowerCase();
     
     // 1. Validation
@@ -66,7 +66,8 @@ export const signUp = async (username: string, password: string): Promise<UserPr
                 password: password,
                 learning_index: 0,
                 learned_words: [],
-                mistakes: {}
+                mistakes: {},
+                is_public: isPublic
             };
 
             const createRes = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
@@ -86,7 +87,8 @@ export const signUp = async (username: string, password: string): Promise<UserPr
                 username: cleanUser,
                 learningIndex: 0,
                 learnedWords: [],
-                mistakes: {}
+                mistakes: {},
+                isPublic: isPublic
             };
         } catch (e: any) {
             console.error("SignUp Exception:", e);
@@ -103,7 +105,8 @@ export const signUp = async (username: string, password: string): Promise<UserPr
         password: password,
         learningIndex: 0,
         learnedWords: [],
-        mistakes: {}
+        mistakes: {},
+        isPublic: isPublic
     };
     db[cleanUser] = newUser;
     saveLocalDB(db);
@@ -139,7 +142,8 @@ export const signIn = async (username: string, password: string): Promise<UserPr
                 username: user.username,
                 learningIndex: user.learning_index || 0,
                 learnedWords: user.learned_words || [],
-                mistakes: user.mistakes || {}
+                mistakes: user.mistakes || {},
+                isPublic: user.is_public ?? true
             };
         } catch (e: any) {
              console.error("SignIn Exception:", e);
@@ -177,7 +181,8 @@ export const getCurrentSession = async (): Promise<UserProfile | null> => {
                     username: user.username,
                     learningIndex: user.learning_index || 0,
                     learnedWords: user.learned_words || [],
-                    mistakes: user.mistakes || {}
+                    mistakes: user.mistakes || {},
+                    isPublic: user.is_public ?? true
                 };
             }
         } catch (e) { console.error("Session sync failed", e); }
@@ -190,7 +195,8 @@ export const getCurrentSession = async (): Promise<UserProfile | null> => {
         username: user.username,
         learningIndex: user.learningIndex || 0,
         learnedWords: user.learnedWords || [],
-        mistakes: user.mistakes || {}
+        mistakes: user.mistakes || {},
+        isPublic: user.isPublic ?? true
     } : null;
 };
 
@@ -249,8 +255,9 @@ export const recordMistake = async (username: string, wordId: string) => {
 export const getLeaderboard = async (): Promise<{username: string, score: number}[]> => {
     if (hasSupabase) {
         try {
-            // Fetch top 100 users, sorted by learning_index desc, filtering out those with 0 score
-            const res = await fetch(`${SUPABASE_URL}/rest/v1/users?learning_index=gt.0&select=username,learning_index&order=learning_index.desc&limit=100`, {
+            // Fetch top 100 users, sorted by learning_index desc
+            // We fetch username, learning_index AND is_public
+            const res = await fetch(`${SUPABASE_URL}/rest/v1/users?learning_index=gt.0&select=username,learning_index,is_public&order=learning_index.desc&limit=100`, {
                 method: 'GET', 
                 headers: apiHeaders
             });
@@ -259,7 +266,7 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
             
             const users = await res.json();
             return users.map((u: any) => ({
-                username: u.username,
+                username: (u.is_public === false) ? "Anonymous" : u.username,
                 score: u.learning_index || 0
             }));
         } catch (e) {
@@ -270,7 +277,7 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
         // Fallback for offline mode
         const db = getLocalDB();
         const users = Object.values(db).map((u: any) => ({
-            username: u.username,
+            username: (u.isPublic === false) ? "Anonymous" : u.username,
             score: u.learningIndex || 0
         })).filter(u => u.score > 0);
         

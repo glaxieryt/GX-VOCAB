@@ -71,4 +71,5 @@ export interface UserProfile {
   learningIndex: number;
   learnedWords: string[];
   mistakes: Record<string, number>; // wordId -> count of mistakes
+  isPublic?: boolean;
 }
