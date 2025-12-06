@@ -11,6 +11,7 @@ import Logo from './components/Logo';
 import AuthScreen from './components/AuthScreen';
 import ThemeToggle from './components/ThemeToggle';
 import { getEasyMeaning } from './services/geminiService';
+import BetaSRS from './components/BetaSRS';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -434,6 +435,12 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex flex-col md:flex-row gap-4 w-full max-w-md animate-slideUp" style={{ animationDelay: '0.25s' }}>
+             <Button onClick={() => setView(AppView.BETA_SRS)} className="h-14 text-lg border-2 border-blue-600 bg-blue-50 text-blue-800 hover:bg-blue-100 hover:border-blue-700 dark:bg-blue-900/20 dark:text-blue-200 dark:border-blue-500">
+                🚀 Beta Version (SRS)
+             </Button>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-4 w-full max-w-md animate-slideUp" style={{ animationDelay: '0.28s' }}>
              <Button onClick={handleShowLeaderboard} variant="outline" fullWidth className="h-14 text-lg border-yellow-600/50 text-yellow-700 dark:text-yellow-500 hover:border-yellow-600">
                 🏆 Leaderboard
              </Button>
@@ -548,6 +555,10 @@ const App: React.FC = () => {
       />
     );
   };
+
+  if (view === AppView.BETA_SRS) {
+      return <BetaSRS onExit={goHome} />;
+  }
 
   if (checkingSession) {
       return (

@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
-import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion } from '../types';
+import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion, RichVocabularyCard } from '../types';
 import { allWords } from '../data';
 
 // Safe API Key access
@@ -98,6 +98,7 @@ export const speakText = async (text: string) => {
             ? `Read the following sentence naturally, with a soft and soothing tone: "${cleanText}"`
             : `Say the word: ${cleanText}`;
 
+        // INCREASED TIMEOUT TO 15s to prevent timeouts
         const response = await withTimeout<GenerateContentResponse>(
             ai.models.generateContent({
                 model: 'gemini-2.5-flash-preview-tts',
@@ -111,7 +112,7 @@ export const speakText = async (text: string) => {
                     },
                 },
             }),
-            5000 
+            15000 
         );
 
         const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
@@ -173,7 +174,7 @@ export const getEasyMeaning = async (word: string, context?: string): Promise<st
             model: 'gemini-2.5-flash',
             contents: prompt,
         }),
-        5000
+        8000
     );
 
     return response.text?.trim() || "No simple meaning available.";
@@ -192,7 +193,7 @@ export const getSentence = async (word: string, meaning: string): Promise<string
                 model: 'gemini-2.5-flash',
                 contents: prompt,
             }),
-            5000
+            8000
         );
         return response.text?.trim() || "";
     } catch (e) {
@@ -215,7 +216,7 @@ export const generateContextQuizQuestion = async (word: Word, distractors: strin
                 model: 'gemini-2.5-flash',
                 contents: prompt,
             }),
-            6000
+            8000
         );
         
         let sentence = response.text?.trim() || "";
@@ -267,7 +268,7 @@ export const generateLessonContent = async (word: Word, previousWords: Word[] = 
             contents: prompt,
             config: { responseMimeType: "application/json" }
         }),
-        8000
+        10000
     );
 
     const data = JSON.parse(response.text || "{}");
@@ -320,7 +321,7 @@ export const generateReviewQuestion = async (word: Word): Promise<LearningQuesti
                 contents: prompt,
                 config: { responseMimeType: "application/json" }
             }),
-            4000
+            8000
         );
         const d = JSON.parse(response.text || "{}");
         const opts = [
@@ -343,6 +344,120 @@ export const generateReviewQuestion = async (word: Word): Promise<LearningQuesti
         return generateFallbackReview(word);
     }
 }
+
+// --- RICH CONTENT GENERATION FOR BETA SRS ---
+
+export const generateRichVocabularyData = async (word: Word): Promise<RichVocabularyCard> => {
+    if (!ai) throw new Error("No API connection");
+
+    const prompt = `
+    Generate comprehensive vocabulary data for the word "${word.term}" (Meaning: "${word.meaning}").
+    Strictly follow this JSON schema:
+    {
+      "word": "${word.term}",
+      "metadata": { "partOfSpeech": "noun/verb/adj", "difficulty": 1-10, "frequency": "low/medium/high" },
+      "pronunciation": { "ipa": "/.../", "syllables": ["syll", "a", "ble"] },
+      "definition": { "primary": "Clear definition" },
+      "etymology": { "origin": "e.g. Latin", "literalMeaning": "literal meaning" },
+      "memoryHooks": { "mnemonic": "memorable trick", "visual": "visual description of an image that represents the word" },
+      "examples": [ { "sentence": "sentence 1", "context": "context type" }, { "sentence": "sentence 2", "context": "context type" } ],
+      "exercises": [
+         { 
+           "type": "synonym_selection", 
+           "difficulty": "easy",
+           "question": "Which word is CLOSEST to ${word.term}?",
+           "options": [{ "text": "correct synonym", "correct": true }, { "text": "wrong 1", "correct": false }, { "text": "wrong 2", "correct": false }, { "text": "wrong 3", "correct": false }],
+           "feedback": { "correct": "Good job!", "incorrect": "Explanation..." }
+         },
+         {
+           "type": "antonym_identification",
+           "difficulty": "easy",
+           "question": "Which word is OPPOSITE to ${word.term}?",
+           "options": [{ "text": "correct antonym", "correct": true }, { "text": "wrong 1", "correct": false }, { "text": "wrong 2", "correct": false }, { "text": "wrong 3", "correct": false }],
+           "feedback": { "correct": "Correct!", "incorrect": "Explanation..." }
+         },
+         {
+           "type": "sentence_completion",
+           "difficulty": "medium",
+           "question": "Fill in the blank: [Sentence with blank]",
+           "options": [{ "text": "${word.term}", "correct": true }, { "text": "distractor1", "correct": false }, { "text": "distractor2", "correct": false }, { "text": "distractor3", "correct": false }],
+           "feedback": { "correct": "Yes!", "incorrect": "No..." }
+         },
+         {
+            "type": "scenario_application",
+            "difficulty": "medium",
+            "scenario": "Short scenario description...",
+            "question": "Which word describes this?",
+            "options": [{ "text": "${word.term}", "correct": true }, { "text": "distractor1", "correct": false }, { "text": "distractor2", "correct": false }, { "text": "distractor3", "correct": false }],
+            "feedback": { "correct": "Yes!", "incorrect": "No..." }
+         },
+         {
+            "type": "reverse_definition",
+            "difficulty": "hard",
+            "definition": "The definition...",
+            "hints": [{ "level": 1, "hint": "Starts with...", "pointDeduction": 3 }]
+         },
+         {
+             "type": "sentence_creation",
+             "difficulty": "hard",
+             "instruction": "Write a sentence using ${word.term}."
+         }
+      ]
+    }`;
+
+    try {
+        const response = await withTimeout<GenerateContentResponse>(
+            ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: { responseMimeType: "application/json" }
+            }),
+            15000 // 15s timeout for large content
+        );
+        const text = response.text || "{}";
+        const data = JSON.parse(text);
+        
+        // Basic validation
+        if (!data.exercises || !Array.isArray(data.exercises)) throw new Error("Invalid schema");
+        
+        return data as RichVocabularyCard;
+    } catch (e) {
+        console.error("Rich Data Gen Failed", e);
+        throw e;
+    }
+}
+
+export const generateWordImage = async (visualDescription: string): Promise<string | null> => {
+    if (!ai) return null;
+    try {
+        // Use gemini-2.5-flash-image as requested in system rules
+        // Note: For image GENERATION, usually models like imagen-3.0-generate-001 are used.
+        // However, user instructions explicitly asked to use 'gemini-2.5-flash-image' 
+        // We will attempt to use it as instructed. 
+        // If it's a multimodal input model only, it might not output inlineData.
+        
+        const response = await withTimeout<GenerateContentResponse>(
+            ai.models.generateContent({
+                model: 'gemini-2.5-flash-image', 
+                contents: `Create a simple, minimalist educational illustration representing: ${visualDescription}`,
+            }),
+            15000
+        );
+
+        // Check for image parts in response
+        if (response.candidates?.[0]?.content?.parts) {
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData && part.inlineData.mimeType.startsWith('image')) {
+                    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                }
+            }
+        }
+        return null;
+    } catch (e) {
+        console.error("Image generation failed", e);
+        return null;
+    }
+};
 
 const generateFallbackLesson = (word: Word): Lesson => {
     const fallbackQ = (idx: number): LearningQuestion => {

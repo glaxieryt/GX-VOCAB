@@ -67,7 +67,8 @@ export const signUp = async (username: string, password: string, isPublic: boole
                 learning_index: 0,
                 learned_words: [],
                 mistakes: {},
-                is_public: isPublic
+                is_public: isPublic,
+                srs_state: {} 
             };
 
             const createRes = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
@@ -256,7 +257,6 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
     if (hasSupabase) {
         try {
             // Fetch top 100 users, sorted by learning_index desc
-            // We fetch username, learning_index AND is_public
             const res = await fetch(`${SUPABASE_URL}/rest/v1/users?learning_index=gt.0&select=username,learning_index,is_public&order=learning_index.desc&limit=100`, {
                 method: 'GET', 
                 headers: apiHeaders
@@ -284,3 +284,41 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
         return users.sort((a, b) => b.score - a.score).slice(0, 100);
     }
 };
+
+// --- BETA SRS SYNC ---
+
+export const saveSRSState = async (username: string, srsState: Record<string, any>) => {
+    if (hasSupabase) {
+        try {
+            await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
+                method: 'PATCH',
+                headers: apiHeaders,
+                body: JSON.stringify({ srs_state: srsState })
+            });
+        } catch (e) { console.error("SRS Sync failed", e); }
+    } else {
+        const db = getLocalDB();
+        if(db[username]) {
+            db[username].srs_state = srsState;
+            saveLocalDB(db);
+        }
+    }
+}
+
+export const getSRSState = async (username: string): Promise<Record<string, any>> => {
+    if (hasSupabase) {
+        try {
+            const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
+                method: 'GET', headers: apiHeaders
+            });
+            const users = await res.json();
+            if (users && users.length > 0) {
+                return users[0].srs_state || {};
+            }
+        } catch (e) { console.error("Get SRS failed", e); }
+    } else {
+        const db = getLocalDB();
+        if(db[username]) return db[username].srs_state || {};
+    }
+    return {};
+}

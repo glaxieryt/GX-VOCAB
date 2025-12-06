@@ -22,6 +22,7 @@ export enum AppView {
   GUIDED_LEARNING = 'GUIDED_LEARNING',
   MISTAKES = 'MISTAKES',
   LEADERBOARD = 'LEADERBOARD',
+  BETA_SRS = 'BETA_SRS',
 }
 
 export enum QuizQuestionType {
@@ -72,4 +73,64 @@ export interface UserProfile {
   learnedWords: string[];
   mistakes: Record<string, number>; // wordId -> count of mistakes
   isPublic?: boolean;
+  srs_state?: Record<string, SRSState>;
+}
+
+// --- ADVANCED BETA TYPES ---
+
+export interface SRSState {
+  interval: number; // Days
+  nextReview: number; // Timestamp
+  easeFactor: number; // Default 2.5
+  streak: number;
+}
+
+export interface ExerciseOption {
+  text: string;
+  correct: boolean;
+  distractor_type?: string;
+}
+
+export interface Exercise {
+  type: 'synonym_selection' | 'antonym_identification' | 'sentence_completion' | 'scenario_application' | 'reverse_definition' | 'sentence_creation';
+  difficulty: 'easy' | 'medium' | 'hard';
+  question?: string;
+  scenario?: string;
+  definition?: string;
+  options?: ExerciseOption[];
+  feedback?: {
+    correct: string;
+    incorrect: string;
+  };
+  hints?: { level: number; hint: string; pointDeduction: number }[];
+  instruction?: string;
+}
+
+export interface RichVocabularyCard {
+  word: string;
+  metadata: {
+    partOfSpeech: string;
+    difficulty: number;
+    frequency: string;
+  };
+  pronunciation: {
+    ipa: string;
+    syllables: string[];
+  };
+  definition: {
+    primary: string;
+  };
+  etymology: {
+    origin: string;
+    literalMeaning: string;
+  };
+  memoryHooks: {
+    mnemonic: string;
+    visual: string;
+  };
+  examples: {
+    sentence: string;
+    context: string;
+  }[];
+  exercises: Exercise[];
 }
