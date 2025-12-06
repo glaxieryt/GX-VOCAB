@@ -1,15 +1,15 @@
-
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion } from '../types';
 import { allWords } from '../data';
 
-// Helper to safely get API key without crashing if process is undefined
+// Helper to safely get API key without crashing if process is undefined (common in pure browser builds)
 const getApiKey = () => {
-  try {
-    return process.env.API_KEY;
-  } catch (e) {
-    return undefined;
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      return process.env.API_KEY;
   }
+  // Fallback for Vite environments if injected via import.meta (not standard in this setup but safe to have)
+  // or if 'define' plugin handles process.env replacement.
+  return undefined;
 };
 
 const apiKey = getApiKey();

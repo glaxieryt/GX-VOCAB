@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { WordGroup, AppView } from './types';
 import { getGroupedData, allWords } from './data';
@@ -15,23 +14,45 @@ const App: React.FC = () => {
   // Learning Progress State
   const [learningIndex, setLearningIndex] = useState(0);
   const [learnedWords, setLearnedWords] = useState<string[]>([]);
+  
+  // New: Loading state to prevent "White Screen" during hydration
+  const [isHydrated, setIsHydrated] = useState(false);
 
-  // Load progress from local storage on mount
+  // Load progress from local storage on mount safely
   useEffect(() => {
-    const savedIndex = localStorage.getItem('gx_learning_index');
-    const savedLearned = localStorage.getItem('gx_learned_words');
-    if (savedIndex) setLearningIndex(parseInt(savedIndex, 10));
-    if (savedLearned) setLearnedWords(JSON.parse(savedLearned));
+    try {
+      const savedIndex = localStorage?.getItem('gx_learning_index');
+      const savedLearned = localStorage?.getItem('gx_learned_words');
+      
+      if (savedIndex) {
+        setLearningIndex(parseInt(savedIndex, 10) || 0);
+      }
+      
+      if (savedLearned) {
+        setLearnedWords(JSON.parse(savedLearned) || []);
+      }
+    } catch (error) {
+      console.error("Failed to load progress:", error);
+      // Fallback to default state if storage is corrupt
+      setLearningIndex(0);
+      setLearnedWords([]);
+    } finally {
+      setIsHydrated(true);
+    }
   }, []);
 
   const saveProgress = (index: number, learned: string[]) => {
-     localStorage.setItem('gx_learning_index', index.toString());
-     localStorage.setItem('gx_learned_words', JSON.stringify(learned));
+     try {
+       localStorage?.setItem('gx_learning_index', index.toString());
+       localStorage?.setItem('gx_learned_words', JSON.stringify(learned));
+     } catch (e) {
+       console.error("Save failed", e);
+     }
   };
 
   const handleWordComplete = (wordId: string) => {
       const newIndex = learningIndex + 1;
-      const newLearned = [...learnedWords, wordId];
+      const newLearned = [...(learnedWords || []), wordId];
       setLearningIndex(newIndex);
       setLearnedWords(newLearned);
       saveProgress(newIndex, newLearned);
@@ -104,63 +125,69 @@ const App: React.FC = () => {
     </header>
   );
 
-  const renderHome = () => (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-12 animate-fadeIn">
-      <div className="text-center space-y-4">
-        <h2 className="text-6xl md:text-8xl font-serif font-medium tracking-tight">Master Words</h2>
-        <p className="text-zinc-500 max-w-md mx-auto text-lg font-light">
-          Expand your vocabulary with grouped learning and AI-assisted mnemonics.
-        </p>
-      </div>
-      
-      {/* Daily Lesson Card */}
-      <div className="w-full max-w-md border border-black p-6 bg-zinc-50 shadow-lg relative overflow-hidden group cursor-pointer" onClick={handleStartGuided}>
-          <div className="absolute top-0 right-0 bg-black text-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest">
-              Guided Path
-          </div>
-          <h3 className="text-2xl font-bold font-serif mb-2">
-              {learningIndex > 0 ? "Continue Learning" : "Start Daily Lesson"}
-          </h3>
-          <p className="text-zinc-500 mb-6 text-sm">Progressive difficulty with spaced repetition.</p>
-          
-          <div className="flex justify-between text-xs font-bold uppercase tracking-widest mb-2 text-zinc-400">
-              <span>Progress</span>
-              <span>{learningIndex} / {allWords.length}</span>
-          </div>
-          <div className="h-2 bg-zinc-200 w-full rounded-full overflow-hidden">
-              <div 
-                  className="h-full bg-black" 
-                  style={{ width: `${Math.min((learningIndex / allWords.length) * 100, 100)}%` }} 
-              />
-          </div>
-          <div className="mt-6 flex justify-between items-end">
-              {learningIndex > 0 ? (
-                  <button 
-                    onClick={handleResetProgress}
-                    className="text-xs text-zinc-400 hover:text-red-600 font-bold uppercase tracking-widest z-10 transition-colors"
-                  >
-                    Reset Progress
-                  </button>
-              ) : (
-                  <div></div> // Spacer
-              )}
-              
-              <span className="text-sm font-bold border-b-2 border-black pb-0.5 group-hover:bg-black group-hover:text-white transition-colors duration-200 px-1 ml-auto">
-                 {learningIndex > 0 ? "Continue Lesson →" : "Start Learning →"}
-              </span>
-          </div>
-      </div>
+  const renderHome = () => {
+    // Calculate progress percentage safely
+    const totalWords = allWords?.length || 1500;
+    const progressPercent = Math.min(((learningIndex || 0) / totalWords) * 100, 100);
 
-      <div className="flex flex-col md:flex-row gap-6 w-full max-w-md">
-        <Button onClick={handleStartLearn} fullWidth className="h-16 text-lg" variant="secondary">
-          Browse Groups
-        </Button>
-        <Button onClick={handleStartTest} variant="outline" fullWidth className="h-16 text-lg">
-          Take a Test
-        </Button>
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-12 animate-fadeIn">
+        <div className="text-center space-y-4">
+          <h2 className="text-6xl md:text-8xl font-serif font-medium tracking-tight">Master Words</h2>
+          <p className="text-zinc-500 max-w-md mx-auto text-lg font-light">
+            Expand your vocabulary with grouped learning and AI-assisted mnemonics.
+          </p>
+        </div>
+        
+        {/* Daily Lesson Card */}
+        <div className="w-full max-w-md border border-black p-6 bg-zinc-50 shadow-lg relative overflow-hidden group cursor-pointer" onClick={handleStartGuided}>
+            <div className="absolute top-0 right-0 bg-black text-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest">
+                Guided Path
+            </div>
+            <h3 className="text-2xl font-bold font-serif mb-2">
+                {learningIndex > 0 ? "Continue Learning" : "Start Daily Lesson"}
+            </h3>
+            <p className="text-zinc-500 mb-6 text-sm">Progressive difficulty with spaced repetition.</p>
+            
+            <div className="flex justify-between text-xs font-bold uppercase tracking-widest mb-2 text-zinc-400">
+                <span>Progress</span>
+                <span>{learningIndex} / {totalWords}</span>
+            </div>
+            <div className="h-2 bg-zinc-200 w-full rounded-full overflow-hidden">
+                <div 
+                    className="h-full bg-black" 
+                    style={{ width: `${progressPercent}%` }} 
+                />
+            </div>
+            <div className="mt-6 flex justify-between items-end">
+                {learningIndex > 0 ? (
+                    <button 
+                      onClick={handleResetProgress}
+                      className="text-xs text-zinc-400 hover:text-red-600 font-bold uppercase tracking-widest z-10 transition-colors"
+                    >
+                      Reset Progress
+                    </button>
+                ) : (
+                    <div></div> // Spacer
+                )}
+                
+                <span className="text-sm font-bold border-b-2 border-black pb-0.5 group-hover:bg-black group-hover:text-white transition-colors duration-200 px-1 ml-auto">
+                   {learningIndex > 0 ? "Continue Lesson →" : "Start Learning →"}
+                </span>
+            </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-6 w-full max-w-md">
+          <Button onClick={handleStartLearn} fullWidth className="h-16 text-lg" variant="secondary">
+            Browse Groups
+          </Button>
+          <Button onClick={handleStartTest} variant="outline" fullWidth className="h-16 text-lg">
+            Take a Test
+          </Button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderGroupSelection = (mode: 'learn' | 'quiz') => (
     <div className="animate-fadeIn">
@@ -174,7 +201,7 @@ const App: React.FC = () => {
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {groups.map((group) => (
+        {groups?.map((group) => (
           <button
             key={group.id}
             onClick={() => handleGroupSelect(group)}
@@ -186,7 +213,7 @@ const App: React.FC = () => {
             <h3 className="text-xl font-semibold group-hover:translate-x-1 transition-transform">
               {group.label}
             </h3>
-            <p className="text-zinc-400 mt-2 text-sm">{group.words.length} words</p>
+            <p className="text-zinc-400 mt-2 text-sm">{group.words?.length || 0} words</p>
           </button>
         ))}
       </div>
@@ -207,7 +234,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="space-y-2">
-        {selectedGroup?.words.map((word) => (
+        {selectedGroup?.words?.map((word) => (
           <WordCard key={word.id} word={word} />
         ))}
       </div>
@@ -222,7 +249,7 @@ const App: React.FC = () => {
 
   const renderQuizMode = () => {
     if (quizResult) {
-      const percentage = Math.round((quizResult.score / quizResult.total) * 100);
+      const percentage = quizResult.total > 0 ? Math.round((quizResult.score / quizResult.total) * 100) : 0;
       return (
         <div className="flex flex-col items-center justify-center min-h-[50vh] animate-fadeIn text-center">
           <span className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-4">Results</span>
@@ -253,6 +280,15 @@ const App: React.FC = () => {
       />
     );
   };
+
+  // Prevent rendering until local storage is checked to avoid flashes or crashes
+  if (!isHydrated) {
+      return (
+          <div className="min-h-screen bg-white flex items-center justify-center">
+               <div className="w-8 h-8 border-4 border-zinc-200 border-t-black rounded-full animate-spin"></div>
+          </div>
+      );
+  }
 
   return (
     <div className="min-h-screen bg-white text-black px-4 md:px-8 font-sans selection:bg-black selection:text-white">
