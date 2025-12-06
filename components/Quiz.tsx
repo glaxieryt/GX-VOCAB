@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { WordGroup, QuizQuestion, QuizQuestionType } from '../types';
 import { generateQuiz } from '../services/quizService';
@@ -58,14 +59,6 @@ const Quiz: React.FC<QuizProps> = ({ group, onFinish, onExit }) => {
       loadDynamicQuestion();
   }, [currentIndex, questions]);
 
-  useEffect(() => {
-    // Read question aloud when it loads
-    const currentQ = questions[currentIndex];
-    if (currentQ && !loadingQuestion && !isAnswered) {
-        // Optional: Auto-read question if desired, or just wait for user interaction
-    }
-  }, [currentIndex, loadingQuestion]);
-
   if (questions.length === 0) {
     return <div className="p-8 text-center text-zinc-500 animate-pulse">Generating Quiz...</div>;
   }
@@ -114,7 +107,7 @@ const Quiz: React.FC<QuizProps> = ({ group, onFinish, onExit }) => {
 
       <div className="mb-10 min-h-[200px] flex flex-col justify-center relative">
         {loadingQuestion ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white dark:bg-zinc-950 z-10">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-white dark:bg-zinc-950 z-10 transition-opacity">
                 <div className="w-8 h-8 border-4 border-zinc-200 dark:border-zinc-800 border-t-black dark:border-t-white rounded-full animate-spin mb-4"></div>
                 <p className="text-zinc-500 text-sm">Generating context sentence...</p>
             </div>
@@ -166,9 +159,9 @@ const Quiz: React.FC<QuizProps> = ({ group, onFinish, onExit }) => {
           
           if (isAnswered) {
              if (idx === currentQ.correctOptionIndex) {
-               btnStyle = "bg-green-600 border-green-600 text-white shadow-lg scale-[1.02]"; // Correct
+               btnStyle = "bg-green-600 border-green-600 text-white shadow-lg scale-[1.02] ring-2 ring-green-600"; // Correct
              } else if (idx === selectedOption) {
-               btnStyle = "bg-red-500 border-red-500 text-white opacity-90"; // Wrong
+               btnStyle = "bg-red-500 border-red-500 text-white opacity-90 ring-2 ring-red-500"; // Wrong
              } else {
                btnStyle = "opacity-40 border-zinc-100 dark:border-zinc-900 grayscale"; // Fade others
              }
@@ -181,20 +174,21 @@ const Quiz: React.FC<QuizProps> = ({ group, onFinish, onExit }) => {
               key={idx}
               onClick={() => handleOptionClick(idx)}
               disabled={isAnswered || loadingQuestion}
-              className={`w-full text-left p-4 border transition-all duration-300 rounded-lg ${btnStyle} ${loadingQuestion ? 'opacity-50' : ''}`}
+              className={`w-full text-left p-4 border transition-all duration-300 rounded-lg flex justify-between items-center group ${btnStyle} ${loadingQuestion ? 'opacity-50' : ''}`}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-start gap-4">
-                  <span className="font-mono text-xs mt-1 text-zinc-400 dark:text-zinc-500 opacity-60">{String.fromCharCode(65 + idx)}.</span>
-                  <span className="text-sm md:text-base font-medium">{option}</span>
-                </div>
-                {isAnswered && idx === currentQ.correctOptionIndex && (
-                     <span className="text-white font-bold">✓</span>
-                )}
-                {isAnswered && idx === selectedOption && idx !== currentQ.correctOptionIndex && (
-                     <span className="text-white font-bold">✗</span>
-                )}
+              <div className="flex items-center gap-4">
+                <span className={`font-mono text-xs mt-1 opacity-60 transition-colors ${isAnswered && (idx === currentQ.correctOptionIndex || idx === selectedOption) ? 'text-white' : 'text-zinc-400 dark:text-zinc-500'}`}>
+                    {String.fromCharCode(65 + idx)}.
+                </span>
+                <span className="text-sm md:text-base font-medium">{option}</span>
               </div>
+              
+              {isAnswered && idx === currentQ.correctOptionIndex && (
+                    <span className="text-white font-bold animate-popIn">✓</span>
+              )}
+              {isAnswered && idx === selectedOption && idx !== currentQ.correctOptionIndex && (
+                    <span className="text-white font-bold animate-popIn">✗</span>
+              )}
             </button>
           );
         })}
@@ -202,16 +196,16 @@ const Quiz: React.FC<QuizProps> = ({ group, onFinish, onExit }) => {
 
       <div className="mt-8 h-14">
         {!isAnswered ? (
-             <Button fullWidth onClick={handleCheck} disabled={selectedOption === null} className="h-14 text-lg">
+             <Button fullWidth onClick={handleCheck} disabled={selectedOption === null} className="h-14 text-lg shadow-lg">
                  Check Answer
              </Button>
         ) : (
              <Button 
                 fullWidth 
                 onClick={handleNext}
-                className={`h-14 text-lg transition-colors duration-300 ${isCorrect ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-zinc-800 text-white'}`}
+                className={`h-14 text-lg transition-all duration-300 shadow-lg ${isCorrect ? 'bg-black dark:bg-white text-white dark:text-black hover:scale-[1.01]' : 'bg-zinc-800 text-white'}`}
              >
-                {currentIndex === questions.length - 1 ? "Finish Quiz" : "Next Question →"}
+                {currentIndex === questions.length - 1 ? "Finish Revision" : "Next Question →"}
              </Button>
         )}
       </div>

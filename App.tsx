@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { WordGroup, AppView, UserProfile } from './types';
 import { getGroupedData, allWords } from './data';
@@ -46,34 +47,52 @@ const App: React.FC = () => {
 
   // Text Selection Listener
   useEffect(() => {
-    const handleSelection = () => {
-        const selection = window.getSelection();
-        const text = selection?.toString().trim();
-
-        if (text && text.length > 0 && text.length < 50) {
-            const range = selection?.getRangeAt(0);
-            const rect = range?.getBoundingClientRect();
-            if (rect) {
-                // Position above the selection
-                setAiPopupPosition({
-                    top: rect.top + window.scrollY - 50,
-                    left: rect.left + window.scrollX + (rect.width / 2)
-                });
-                setSelectedText(text);
-                setAiMeaning(null); // Reset previous result
-                setLoadingAi(false);
+    const handleSelection = (e: Event) => {
+        // Delay slightly to let the browser process the selection
+        setTimeout(() => {
+            const selection = window.getSelection();
+            const text = selection?.toString().trim();
+            
+            // If clicking inside the popup, don't clear it
+            if ((e.target as HTMLElement).closest('.ask-ai-popup')) {
+                return;
             }
-        } else {
-            // Clicked away or empty selection
-            setAiPopupPosition(null);
-            setSelectedText(null);
-        }
+
+            if (text && text.length > 0 && text.length < 50) {
+                const range = selection?.getRangeAt(0);
+                const rect = range?.getBoundingClientRect();
+                if (rect && rect.width > 0) {
+                    // Position above the selection
+                    setAiPopupPosition({
+                        top: rect.top + window.scrollY - 60,
+                        left: rect.left + window.scrollX + (rect.width / 2)
+                    });
+                    setSelectedText(text);
+                    // Only reset meaning if it's a new text
+                    if (selectedText !== text) {
+                         setAiMeaning(null);
+                         setLoadingAi(false);
+                    }
+                }
+            } else {
+                // Clicked away or empty selection
+                setAiPopupPosition(null);
+                setSelectedText(null);
+            }
+        }, 10);
     };
 
-    // Use mouseup to detect end of drag/selection
+    // Listeners for mouse, touch, and keyboard selection
     document.addEventListener('mouseup', handleSelection);
-    return () => document.removeEventListener('mouseup', handleSelection);
-  }, []);
+    document.addEventListener('touchend', handleSelection); 
+    document.addEventListener('keyup', handleSelection);
+
+    return () => {
+        document.removeEventListener('mouseup', handleSelection);
+        document.removeEventListener('touchend', handleSelection);
+        document.removeEventListener('keyup', handleSelection);
+    };
+  }, [selectedText]);
 
   const handleAuthSuccess = (loggedInUser: UserProfile) => {
       setUser(loggedInUser);
@@ -124,10 +143,11 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAskAI = async () => {
+  const handleAskAI = async (e: React.MouseEvent) => {
+      e.stopPropagation(); // Prevent clearing selection
       if (!selectedText) return;
       setLoadingAi(true);
-      const meaning = await getEasyMeaning(selectedText, "General Context");
+      const meaning = await getEasyMeaning(selectedText, "General Vocabulary");
       setAiMeaning(meaning);
       setLoadingAi(false);
   };
@@ -500,15 +520,20 @@ const App: React.FC = () => {
       {/* Ask AI Context Menu */}
       {aiPopupPosition && selectedText && (
           <div 
-             className="fixed z-50 bg-black dark:bg-white text-white dark:text-black rounded-lg shadow-2xl p-4 w-72 animate-popIn"
-             style={{ top: aiPopupPosition.top, left: aiPopupPosition.left, transform: 'translateX(-50%) translateY(-100%)' }}
+             className="fixed bg-black dark:bg-white text-white dark:text-black rounded-lg shadow-2xl p-4 w-72 animate-popIn ask-ai-popup"
+             style={{ 
+                 top: aiPopupPosition.top, 
+                 left: aiPopupPosition.left, 
+                 transform: 'translateX(-50%) translateY(-100%)',
+                 zIndex: 9999 
+             }}
              onMouseDown={(e) => e.stopPropagation()} 
           >
               <div className="flex justify-between items-start mb-2">
                   <span className="text-xs font-bold uppercase tracking-widest opacity-70">Ask AI</span>
               </div>
               
-              <div className="text-lg font-serif italic mb-3 border-l-2 border-white/30 dark:border-black/30 pl-3">"{selectedText}"</div>
+              <div className="text-lg font-serif italic mb-3 border-l-2 border-white/30 dark:border-black/30 pl-3 line-clamp-3">"{selectedText}"</div>
               
               {loadingAi ? (
                   <div className="flex items-center gap-2 text-xs opacity-70">
