@@ -5,30 +5,23 @@ const USERS_KEY = 'gx_users_db';
 const SESSION_KEY = 'gx_current_session';
 
 // --- SUPABASE CONFIG ---
-// Robustly check for keys in various environments (Vite local, Vercel build, Runtime)
-const getEnvVar = (key: string, viteKey: string) => {
-    // Check standard Vite import.meta.env
-    // Cast to any to avoid TS errors if vite types aren't explicitly loaded in this context
-    if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[viteKey]) {
-        return (import.meta as any).env[viteKey];
-    }
-    // Check process.env (injected by define in vite.config.ts)
-    if (typeof process !== 'undefined' && process.env) {
-        return process.env[viteKey] || process.env[key];
-    }
-    return '';
-};
+// CRITICAL: We must access these directly (not via a helper function with dynamic keys)
+// so that Vite's build process can replace the strings 'process.env.VITE_SUPABASE_URL' with the actual values.
 
-const SUPABASE_URL = getEnvVar('SUPABASE_URL', 'VITE_SUPABASE_URL');
-const SUPABASE_KEY = getEnvVar('SUPABASE_ANON_KEY', 'VITE_SUPABASE_KEY');
+// 1. Try process.env (Injected by vite.config.ts define for Vercel)
+// 2. Try import.meta.env (Standard Vite for local dev)
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || (import.meta as any).env?.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY || (import.meta as any).env?.VITE_SUPABASE_KEY || '';
 
-const hasSupabase = !!(SUPABASE_URL && SUPABASE_KEY);
+const hasSupabase = !!(SUPABASE_URL && SUPABASE_KEY && SUPABASE_URL.startsWith('http'));
 
 if (!hasSupabase) {
-    console.warn("Supabase keys missing. Falling back to localStorage (No Cross-Device Sync).");
+    console.warn("Supabase keys missing or invalid. Falling back to localStorage (No Cross-Device Sync).");
 } else {
-    console.log("Supabase connected.");
+    console.log("Supabase config found.");
 }
+
+export const getConnectionStatus = () => hasSupabase;
 
 // --- API Helpers ---
 
@@ -96,7 +89,8 @@ export const signUp = async (username: string, password: string): Promise<UserPr
                 mistakes: {}
             };
         } catch (e: any) {
-            throw typeof e === 'string' ? e : "Connection error. Please try again.";
+            console.error("SignUp Exception:", e);
+            throw typeof e === 'string' ? e : "Connection error. Check your internet.";
         }
     }
 
@@ -148,6 +142,7 @@ export const signIn = async (username: string, password: string): Promise<UserPr
                 mistakes: user.mistakes || {}
             };
         } catch (e: any) {
+             console.error("SignIn Exception:", e);
              throw typeof e === 'string' ? e : "Login failed. Please check connection.";
         }
     }
@@ -155,7 +150,7 @@ export const signIn = async (username: string, password: string): Promise<UserPr
     // Fallback
     const db = getLocalDB();
     const user = db[cleanUser];
-    if (!user) throw "User not found.";
+    if (!user) throw "User not found (Offline Mode).";
     if (user.password !== password) throw "Invalid password.";
     
     localStorage.setItem(SESSION_KEY, cleanUser);
