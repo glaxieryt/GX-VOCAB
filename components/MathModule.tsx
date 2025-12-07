@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { MathView, MathTopic, DifficultyLevel, MathProblem } from '../types';
 import { generateProblem } from '../services/mathService';
+import SequenceSeries from './SequenceSeries';
 
 // --- PROFESSIONAL UI COMPONENTS ---
 
@@ -182,6 +183,34 @@ const MathDashboard: React.FC<{ onSelectTopic: (topic: MathTopic) => void; onExi
                     </div>
                 </PCard>
             </div>
+
+            {/* NET MATHS SECTION */}
+            <div className="mt-12 pt-10 border-t border-slate-200">
+                <div className="flex items-center gap-3 mb-6">
+                    <span className="text-2xl">🎓</span>
+                    <h2 className="text-xl font-bold text-slate-900">NET MATHS (Entrance Exam)</h2>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <PCard hover onClick={() => onSelectTopic(MathTopic.NET_MATHS)} className="bg-slate-900 border-slate-800 group relative overflow-hidden">
+                        <div className="absolute right-0 top-0 p-4 opacity-50">
+                            <span className="text-6xl font-black text-red-900/50">∑</span>
+                        </div>
+                        <div className="relative z-10">
+                            <h3 className="text-lg font-bold text-white mb-2 group-hover:text-red-500 transition-colors">Sequence & Series</h3>
+                            <p className="text-slate-400 text-sm mb-4">Master AP, GP, Means, and infinite series shortcuts.</p>
+                            <div className="flex gap-2">
+                                <span className="text-[10px] font-bold uppercase bg-red-900/30 text-red-400 px-2 py-1 rounded">Cheat Codes</span>
+                                <span className="text-[10px] font-bold uppercase bg-slate-800 text-slate-300 px-2 py-1 rounded">Drills</span>
+                            </div>
+                        </div>
+                    </PCard>
+                    
+                    <div className="border border-dashed border-slate-300 rounded-xl p-6 flex items-center justify-center text-slate-400 bg-slate-50">
+                        More Topics Coming Soon...
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
@@ -333,9 +362,17 @@ const MathModule: React.FC<{ onExit: () => void; onEarnXP: (amount: number) => v
     const [topic, setTopic] = useState<MathTopic | null>(null);
 
     const handleSelectTopic = (t: MathTopic) => {
-        setTopic(t);
-        setView(MathView.PRACTICE);
+        if (t === MathTopic.NET_MATHS) {
+            setView(MathView.NET_SEQUENCE_SERIES);
+        } else {
+            setTopic(t);
+            setView(MathView.PRACTICE);
+        }
     };
+
+    if (view === MathView.NET_SEQUENCE_SERIES) {
+        return <SequenceSeries onExit={() => setView(MathView.DASHBOARD)} />;
+    }
 
     if (view === MathView.PRACTICE && topic) {
         return <PracticeSession topic={topic} onFinish={() => setView(MathView.DASHBOARD)} onEarnXP={onEarnXP} />;

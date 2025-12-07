@@ -1,4 +1,6 @@
 
+// ... (previous imports)
+
 export interface Word {
   id: string;
   term: string;
@@ -144,14 +146,16 @@ export enum MathView {
   DASHBOARD = 'DASHBOARD',
   LESSON = 'LESSON',
   PRACTICE = 'PRACTICE',
-  RESULTS = 'RESULTS'
+  RESULTS = 'RESULTS',
+  NET_SEQUENCE_SERIES = 'NET_SEQUENCE_SERIES'
 }
 
 export enum MathTopic {
   MULTIPLICATION = 'MULTIPLICATION',
   POWERS = 'POWERS',
   ROOTS = 'ROOTS',
-  MIXED = 'MIXED'
+  MIXED = 'MIXED',
+  NET_MATHS = 'NET_MATHS'
 }
 
 export enum DifficultyLevel {
