@@ -191,7 +191,7 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         
         // IMMEDIATE PERSIST
         if (user) {
-            // Also award 50 XP for completing the word
+            // Award 50 XP for completing the word
             saveSRSState(user, newState, 50);
             onEarnXP(50);
         } else {

@@ -64,7 +64,7 @@ const ProgressBar: React.FC<{ progress: number; color?: string }> = ({ progress,
 
 const MathDashboard: React.FC<{ onSelectTopic: (topic: MathTopic) => void; onExit: () => void }> = ({ onSelectTopic, onExit }) => {
     return (
-        <div className="max-w-6xl mx-auto p-6 animate-fadeIn">
+        <div className="max-w-6xl mx-auto p-6 animate-fadeIn pt-20">
             {/* Hero */}
             <div className="mb-10 flex justify-between items-end">
                 <div>
@@ -235,7 +235,7 @@ const PracticeSession: React.FC<{ topic: MathTopic; onFinish: () => void; onEarn
     };
 
     return (
-        <div className="max-w-3xl mx-auto p-6 animate-fadeIn min-h-screen flex flex-col">
+        <div className="max-w-3xl mx-auto p-6 animate-fadeIn min-h-screen flex flex-col pt-24">
             <div className="flex justify-between items-center mb-8">
                 <div className="flex items-center gap-4">
                     <PButton onClick={onFinish} variant="ghost" className="text-slate-500 hover:text-slate-800">

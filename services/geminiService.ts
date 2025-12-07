@@ -79,7 +79,7 @@ async function decodeAudioData(
 }
 
 export const speakText = async (text: string) => {
-    // If no API key, immediately fallback without error
+    // If no API key, immediately fallback
     if (!ai) {
         speakNative(text);
         return;
@@ -96,10 +96,10 @@ export const speakText = async (text: string) => {
         const cleanText = text.replace(/<[^>]*>/g, '');
         const isSentence = cleanText.trim().includes(' ');
         const prompt = isSentence 
-            ? `Read the following sentence naturally, with a soft and soothing tone: "${cleanText}"`
+            ? `Read this sentence naturally: "${cleanText}"`
             : `Say the word: ${cleanText}`;
 
-        // INCREASED TIMEOUT TO 15s to prevent timeouts
+        // Increased timeout significantly for TTS
         const response = await withTimeout<GenerateContentResponse>(
             ai.models.generateContent({
                 model: 'gemini-2.5-flash-preview-tts',
@@ -113,11 +113,17 @@ export const speakText = async (text: string) => {
                     },
                 },
             }),
-            15000 
+            20000 
         );
 
+        // Robust check for audio data
         const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        if (!base64Audio) throw new Error("No audio data received");
+        
+        if (!base64Audio) {
+            console.warn("Gemini TTS returned no audio data. Using fallback.");
+            speakNative(text);
+            return;
+        }
 
         const audioBuffer = await decodeAudioData(
             decode(base64Audio),
@@ -132,13 +138,13 @@ export const speakText = async (text: string) => {
         source.start();
 
     } catch (error: any) {
-        // Handle Rate Limit (429) specifically to avoid scary logs
+        // Handle Rate Limit (429) silently
         if (error?.message?.includes('429') || error?.status === 429) {
-            console.warn("Gemini TTS Quota Exceeded. Falling back to native speech.");
+            // console.warn("Quota exceeded, using fallback");
         } else {
-            console.error("Gemini TTS Failed (Fallback active):", error);
+            console.error("TTS Error:", error);
         }
-        // Always fallback
+        // Always fallback on error
         speakNative(text);
     }
 };
@@ -160,11 +166,11 @@ const speakNative = (text: string) => {
         }
         
         utterance.rate = 0.9;
-        utterance.pitch = 1.15; 
+        utterance.pitch = 1.1; 
 
         window.speechSynthesis.speak(utterance);
     } catch (e) {
-        console.error("Native TTS failed", e);
+        // Silent fail
     }
 };
 
@@ -174,10 +180,9 @@ export const getEasyMeaning = async (word: string, context?: string): Promise<st
 
   try {
     const prompt = `
-      Provide a very short, easy-to-remember explanation or definition for the text "${word}".
-      ${context ? `Context: This word refers to: "${context}".` : ''}
-      Keep it under 20 words. Simple language.
-      Do not add markdown formatting or quotes.
+      Provide a very short, easy-to-remember explanation for "${word}".
+      ${context ? `Context: "${context}".` : ''}
+      Keep it under 20 words. Simple language. No markdown.
     `;
 
     const response = await withTimeout<GenerateContentResponse>(
@@ -190,7 +195,6 @@ export const getEasyMeaning = async (word: string, context?: string): Promise<st
 
     return response.text?.trim() || "No simple meaning available.";
   } catch (error) {
-    console.error("Gemini API Error:", error);
     return "Could not generate meaning.";
   }
 };
@@ -198,7 +202,7 @@ export const getEasyMeaning = async (word: string, context?: string): Promise<st
 export const getSentence = async (word: string, meaning: string): Promise<string> => {
     if (!ai) return "";
     try {
-        const prompt = `Write a simple sentence using the word "${word}" (meaning: ${meaning}). Keep it under 20 words. Do not quote the word.`;
+        const prompt = `Write a simple sentence using "${word}" (meaning: ${meaning}). Max 20 words. No quotes.`;
         const response = await withTimeout<GenerateContentResponse>(
             ai.models.generateContent({
                 model: 'gemini-2.5-flash',
@@ -227,7 +231,7 @@ export const generateContextQuizQuestion = async (word: Word, distractors: strin
                 model: 'gemini-2.5-flash',
                 contents: prompt,
             }),
-            8000
+            10000
         );
         
         let sentence = response.text?.trim() || "";
@@ -246,31 +250,30 @@ export const generateContextQuizQuestion = async (word: Word, distractors: strin
             correctOptionIndex: options.indexOf(word.meaning),
         };
     } catch (error) {
-        console.error("Error generating context question", error);
         throw error;
     }
 }
 
-export const generateLessonContent = async (word: Word, previousWords: Word[] = []): Promise<Lesson> => {
+export const generateLessonContent = async (word: Word): Promise<Lesson> => {
   if (!ai) return generateFallbackLesson(word);
 
   try {
     const prompt = `
-      Generate a vocabulary lesson for the word: "${word.term}" (Meaning: "${word.meaning}").
-      Output JSON format ONLY:
+      Generate a vocabulary lesson for: "${word.term}" (Meaning: "${word.meaning}").
+      JSON Output:
       {
-        "introSentence": "A clear, simple sentence using the word. Wrap the word ${word.term} in <u> tags.",
+        "introSentence": "Sentence using ${word.term} (wrap in <u>)",
         "questions": [
            {
-             "sentence": "A sentence using ${word.term} (wrap word in <u> tags)",
-             "correctMeaning": "Correct meaning interpretation",
-             "wrongMeaning1": "Wrong meaning 1",
-             "wrongMeaning2": "Wrong meaning 2",
-             "wrongMeaning3": "Wrong meaning 3"
+             "sentence": "Sentence using ${word.term} (wrap in <u>)",
+             "correctMeaning": "Correct meaning",
+             "wrongMeaning1": "Wrong 1",
+             "wrongMeaning2": "Wrong 2",
+             "wrongMeaning3": "Wrong 3"
            }
         ]
       }
-      Generate 3 distinct questions.
+      Generate 3 questions.
     `;
 
     const response = await withTimeout<GenerateContentResponse>(
@@ -279,7 +282,7 @@ export const generateLessonContent = async (word: Word, previousWords: Word[] = 
             contents: prompt,
             config: { responseMimeType: "application/json" }
         }),
-        10000
+        12000
     );
 
     const data = JSON.parse(response.text || "{}");
@@ -323,7 +326,7 @@ export const generateReviewQuestion = async (word: Word): Promise<LearningQuesti
     
     try {
         const prompt = `
-          Generate a multiple choice question for the word "${word.term}".
+          Generate a multiple choice question for "${word.term}".
           JSON Output: { "sentence": "Sentence using ${word.term}", "correct": "Meaning", "distractor1": "...", "distractor2": "...", "distractor3": "..." }
         `;
         const response = await withTimeout<GenerateContentResponse>(
@@ -423,12 +426,11 @@ export const generateRichVocabularyData = async (word: Word): Promise<RichVocabu
                 contents: prompt,
                 config: { responseMimeType: "application/json" }
             }),
-            15000 // 15s timeout for large content
+            25000 // Increased timeout to 25s for large rich content
         );
         const text = response.text || "{}";
         const data = JSON.parse(text);
         
-        // Basic validation
         if (!data.exercises || !Array.isArray(data.exercises)) throw new Error("Invalid schema");
         
         return data as RichVocabularyCard;
@@ -464,6 +466,7 @@ export const generateWordImage = async (visualDescription: string): Promise<stri
 };
 
 const generateFallbackLesson = (word: Word): Lesson => {
+    // ... (Fallback implementation same as before)
     const fallbackQ = (idx: number): LearningQuestion => {
         const distractors = [];
         for(let i=0; i<3; i++) {
@@ -496,6 +499,7 @@ const generateFallbackLesson = (word: Word): Lesson => {
 };
 
 const generateFallbackReview = (word: Word): LearningQuestion => {
+     // ... (Fallback review)
      const distractors = [];
      for(let i=0; i<3; i++) {
           const r = Math.floor(Math.random() * allWords.length);

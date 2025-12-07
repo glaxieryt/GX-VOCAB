@@ -623,8 +623,8 @@ const App: React.FC = () => {
       <FloatingXPBar />
 
       <div className="max-w-5xl mx-auto">
-        {/* Header - Hidden in Math Mode and Subject Selection */}
-        {view !== AppView.SUBJECT_SELECTION && view !== AppView.MATH_MODE && renderHeader()}
+        {/* Header - Always visible now */}
+        {renderHeader()}
         
         <main className="pb-10">
           {view === AppView.SUBJECT_SELECTION && renderSubjectSelection()}

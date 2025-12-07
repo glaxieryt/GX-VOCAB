@@ -48,6 +48,8 @@ export const signUp = async (username: string, password: string, isPublic: boole
                 mistakes: {},
                 xp: 0, // Init XP
                 is_public: isPublic
+                // NOTE: srs_state removed to prevent error if column is missing.
+                // It will be added on first saveSRSState.
             };
 
             const createRes = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
@@ -268,13 +270,6 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
 export const saveSRSState = async (username: string, srsState: Record<string, any>, addedXp: number = 0) => {
     if (hasSupabase) {
         try {
-            // We need to fetch current XP to add to it, strictly speaking Supabase supports atomic increment via RPC
-            // but for simplicity via REST we assume we might need to get then set or just send the object.
-            // However, to keep it simple and consistent with other functions, we'll try to just patch srs_state.
-            // If we want to add XP, we should ideally fetch current XP first. 
-            // For now, let's assume we pass the *total* XP if we had it, but here we only have *added* XP.
-            // A robust way without RPC is tricky. We'll do a Get-Modify-Set for XP.
-            
             const getRes = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
                 method: 'GET', headers: apiHeaders
             });
