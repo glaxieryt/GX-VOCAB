@@ -1,4 +1,5 @@
 
+// ... existing imports ...
 import React, { useState, useMemo, useEffect } from 'react';
 import { WordGroup, AppView, UserProfile } from './types';
 import { getGroupedData, allWords } from './data';
@@ -652,7 +653,7 @@ const App: React.FC = () => {
       {/* Beta & Math Modules take over the screen but we still render them here to share context */}
       {view === AppView.BETA_SRS && (
           <div className="fixed inset-0 z-40 overflow-y-auto bg-zinc-50 dark:bg-zinc-950">
-              <BetaSRS onExit={goHome} />
+              <BetaSRS onExit={goHome} onEarnXP={handleEarnXP} />
           </div>
       )}
 

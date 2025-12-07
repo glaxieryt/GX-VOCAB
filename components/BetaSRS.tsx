@@ -10,7 +10,12 @@ import Button from './Button';
 // --- Phases ---
 type Phase = 'DASHBOARD' | 'LOADING' | 'PHASE1_ENCODING' | 'PHASE2_EXERCISES' | 'PHASE3_CONFIDENCE' | 'PHASE4_SUMMARY' | 'SESSION_COMPLETE';
 
-const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
+interface BetaSRSProps {
+    onExit: () => void;
+    onEarnXP: (amount: number) => void;
+}
+
+const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
     // Session State
     const [phase, setPhase] = useState<Phase>('DASHBOARD');
     const [queue, setQueue] = useState<Word[]>([]);
@@ -28,7 +33,6 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
     const [feedback, setFeedback] = useState<'IDLE' | 'CORRECT' | 'WRONG'>('IDLE');
     const [selectedOption, setSelectedOption] = useState<number | null>(null);
     const [inputVal, setInputVal] = useState('');
-    const [hintsUsed, setHintsUsed] = useState(0);
     const [timeLeft, setTimeLeft] = useState(45); // Encoding timer
 
     // Stats
@@ -116,7 +120,6 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         setFeedback('IDLE');
         setSelectedOption(null);
         setInputVal('');
-        setHintsUsed(0);
     };
 
     const handleCheck = () => {
@@ -137,6 +140,8 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
             setFeedback('CORRECT');
             playSuccessSound();
             setSessionStats(prev => ({ ...prev, correct: prev.correct + 1, total: prev.total + 1 }));
+            // Award XP for correct exercise
+            onEarnXP(10);
         } else {
             setFeedback('WRONG');
             playErrorSound();
@@ -181,11 +186,19 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         const nextReviewDate = Date.now() + (newInterval * 24 * 60 * 60 * 1000);
         const newState = { ...srsState, [wordId]: { interval: newInterval, nextReview: nextReviewDate, easeFactor: newEase, streak: newStreak } };
         
+        // IMMEDIATE UPDATE
         setSrsState(newState);
-        if (user) saveSRSState(user, newState);
-        else localStorage.setItem('gx_beta_srs', JSON.stringify(newState));
+        
+        // IMMEDIATE PERSIST
+        if (user) {
+            // Also award 50 XP for completing the word
+            saveSRSState(user, newState, 50);
+            onEarnXP(50);
+        } else {
+            localStorage.setItem('gx_beta_srs', JSON.stringify(newState));
+        }
 
-        // INSTEAD of jumping to next word, go to Summary Phase
+        // GO TO SUMMARY PHASE (Intermission)
         setPhase('PHASE4_SUMMARY');
     };
 
@@ -199,10 +212,15 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         }
     };
 
+    const handleExitLesson = () => {
+        // Return to Dashboard, not App Home
+        setPhase('DASHBOARD');
+    };
+
     // --- HELPER COMPONENTS ---
     const SessionHeader = () => (
         <div className="flex justify-between items-center mb-6 px-1">
-            <Button variant="secondary" onClick={onExit} className="px-3 py-1.5 h-auto text-xs flex items-center gap-1">
+            <Button variant="secondary" onClick={handleExitLesson} className="px-3 py-1.5 h-auto text-xs flex items-center gap-1">
                 <span>←</span> Exit Lesson
             </Button>
             <div className="flex flex-col items-end">
@@ -266,7 +284,7 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                 <div className="w-16 h-16 border-4 border-t-blue-500 border-zinc-200 dark:border-zinc-800 rounded-full animate-spin mb-6"></div>
                 <h2 className="text-xl font-serif font-bold text-zinc-800 dark:text-zinc-200">Generating Rich Content...</h2>
                 <p className="text-sm text-zinc-500 mt-2">Consulting cognitive science engine</p>
-                <button onClick={onExit} className="mt-8 text-xs underline text-zinc-400">Cancel</button>
+                <button onClick={handleExitLesson} className="mt-8 text-xs underline text-zinc-400">Cancel</button>
             </div>
         );
     }
@@ -277,7 +295,7 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                  <h1 className="text-6xl mb-6">🎉</h1>
                  <h2 className="text-4xl font-serif font-bold text-black dark:text-white mb-4">Session Complete</h2>
                  <p className="text-zinc-600 dark:text-zinc-400 mb-8">Accuracy: {sessionStats.total > 0 ? Math.round((sessionStats.correct/sessionStats.total)*100) : 0}%</p>
-                 <button onClick={onExit} className="bg-black dark:bg-white text-white dark:text-black py-3 px-8 rounded-full font-bold">Return Home</button>
+                 <button onClick={handleExitLesson} className="bg-black dark:bg-white text-white dark:text-black py-3 px-8 rounded-full font-bold">Return to Dashboard</button>
              </div>
          );
     }
@@ -492,7 +510,7 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
         );
     }
 
-    // --- PHASE 4 RENDER: WORD SUMMARY & CHOICE ---
+    // --- PHASE 4 RENDER: WORD SUMMARY & CHOICE (INTERMISSION) ---
     if (phase === 'PHASE4_SUMMARY') {
         return (
             <div className="min-h-screen bg-green-50 dark:bg-zinc-950 p-6 flex flex-col items-center justify-center">
@@ -509,7 +527,7 @@ const BetaSRS: React.FC<{ onExit: () => void }> = ({ onExit }) => {
                         <Button fullWidth onClick={handleContinue} className="h-14 text-lg">
                             Continue to Next Word →
                         </Button>
-                        <Button fullWidth variant="secondary" onClick={onExit} className="h-14">
+                        <Button fullWidth variant="secondary" onClick={handleExitLesson} className="h-14">
                             Exit to Dashboard
                         </Button>
                     </div>
