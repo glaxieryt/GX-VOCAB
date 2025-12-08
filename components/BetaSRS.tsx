@@ -38,19 +38,20 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
     // Stats
     const [sessionStats, setSessionStats] = useState({ correct: 0, total: 0 });
 
-    // Load Data on Mount
+    // Load Data on Mount - CRITICAL FIX
     useEffect(() => {
         const init = async () => {
             const u = await getCurrentSession();
             setUser(u?.username || null);
             
-            let loadedSRS = {};
-            if (u) loadedSRS = await getSRSState(u.username);
-            else {
+            if (u) {
+                // Force fetch from DB to ensure we have latest state
+                const loadedSRS = await getSRSState(u.username);
+                setSrsState(loadedSRS);
+            } else {
                 const local = localStorage.getItem('gx_beta_srs');
-                if (local) loadedSRS = JSON.parse(local);
+                if (local) setSrsState(JSON.parse(local));
             }
-            setSrsState(loadedSRS);
         };
         init();
     }, []);
@@ -62,17 +63,28 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
             const s = (srsState as any)[w.id];
             return s && s.nextReview <= now;
         });
-        const newWords = allWords.filter(w => !(srsState as any)[w.id]).slice(0, 5); // Start small
         
-        const newQueue = [...due, ...newWords];
-        if (newQueue.length === 0) {
+        // Also include words in "learning" phase (interval < 1 day) even if not strictly due yet to allow continuous learning
+        const learning = allWords.filter(w => {
+             const s = (srsState as any)[w.id];
+             return s && s.interval < 1 && s.nextReview > now;
+        });
+
+        const newWords = allWords.filter(w => !(srsState as any)[w.id]).slice(0, 5); 
+        
+        const newQueue = [...due, ...learning, ...newWords];
+        // Unique words only
+        const uniqueQueue = Array.from(new Set(newQueue.map(w => w.id)))
+            .map(id => newQueue.find(w => w.id === id)!);
+
+        if (uniqueQueue.length === 0) {
             alert("No words due for review and no new words available!");
             return;
         }
         
-        setQueue(newQueue);
+        setQueue(uniqueQueue);
         setQueueIndex(0);
-        loadWordData(newQueue[0]);
+        loadWordData(uniqueQueue[0]);
     };
 
     const loadWordData = async (word: Word) => {
@@ -189,7 +201,7 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         // IMMEDIATE UPDATE
         setSrsState(newState);
         
-        // IMMEDIATE PERSIST
+        // IMMEDIATE PERSIST - CRITICAL
         if (user) {
             // Award 50 XP for completing the word
             saveSRSState(user, newState, 50);
@@ -215,6 +227,10 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
     const handleExitLesson = () => {
         // Return to Dashboard, not App Home
         setPhase('DASHBOARD');
+        // Reload state to ensure sync
+        if(user) {
+             getSRSState(user).then(s => setSrsState(s));
+        }
     };
 
     // --- HELPER COMPONENTS ---

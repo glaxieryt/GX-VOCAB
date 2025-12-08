@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
-import { MathView, MathTopic, DifficultyLevel, MathProblem } from '../types';
+import React, { useState, useEffect } from 'react';
+import { MathView, MathTopic, DifficultyLevel, MathProblem, MathStats } from '../types';
 import { generateProblem } from '../services/mathService';
+import { getCurrentSession, saveMathProgress } from '../services/authService';
 import SequenceSeries from './SequenceSeries';
 
 // --- PROFESSIONAL UI COMPONENTS ---
@@ -64,6 +65,16 @@ const ProgressBar: React.FC<{ progress: number; color?: string }> = ({ progress,
 // --- VIEWS ---
 
 const MathDashboard: React.FC<{ onSelectTopic: (topic: MathTopic) => void; onExit: () => void }> = ({ onSelectTopic, onExit }) => {
+    const [stats, setStats] = useState<MathStats>({ streak: 0, solved: 0, lastPlayed: 0, progress: {} });
+
+    useEffect(() => {
+        const load = async () => {
+            const user = await getCurrentSession();
+            if (user?.math_stats) setStats(user.math_stats);
+        };
+        load();
+    }, []);
+
     return (
         <div className="max-w-6xl mx-auto p-6 animate-fadeIn pt-20">
             {/* Hero */}
@@ -82,7 +93,7 @@ const MathDashboard: React.FC<{ onSelectTopic: (topic: MathTopic) => void; onExi
                         <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-xl">🔥</div>
                         <div>
                             <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Current Streak</p>
-                            <p className="text-2xl font-bold text-slate-900">0 Days</p>
+                            <p className="text-2xl font-bold text-slate-900">{stats.streak} Days</p>
                         </div>
                     </div>
                 </PCard>
@@ -91,7 +102,7 @@ const MathDashboard: React.FC<{ onSelectTopic: (topic: MathTopic) => void; onExi
                         <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold text-xl">✓</div>
                         <div>
                             <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Problems Solved</p>
-                            <p className="text-2xl font-bold text-slate-900">0</p>
+                            <p className="text-2xl font-bold text-slate-900">{stats.solved}</p>
                         </div>
                     </div>
                 </PCard>
@@ -100,7 +111,7 @@ const MathDashboard: React.FC<{ onSelectTopic: (topic: MathTopic) => void; onExi
                         <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 font-bold text-xl">★</div>
                         <div>
                             <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">Mastery Level</p>
-                            <p className="text-2xl font-bold text-slate-900">Novice</p>
+                            <p className="text-2xl font-bold text-slate-900">{stats.solved > 50 ? 'Intermediate' : 'Novice'}</p>
                         </div>
                     </div>
                 </PCard>
@@ -125,9 +136,9 @@ const MathDashboard: React.FC<{ onSelectTopic: (topic: MathTopic) => void; onExi
                         <div className="space-y-2">
                             <div className="flex justify-between text-xs font-semibold text-slate-500">
                                 <span>Progress</span>
-                                <span>0%</span>
+                                <span>{stats.progress[MathTopic.MULTIPLICATION] || 0}%</span>
                             </div>
-                            <ProgressBar progress={0} />
+                            <ProgressBar progress={stats.progress[MathTopic.MULTIPLICATION] || 0} />
                         </div>
                         <div className="mt-6 flex justify-end">
                             <span className="text-sm font-semibold text-indigo-600 group-hover:translate-x-1 transition-transform">Continue Learning →</span>
@@ -149,9 +160,9 @@ const MathDashboard: React.FC<{ onSelectTopic: (topic: MathTopic) => void; onExi
                         <div className="space-y-2">
                             <div className="flex justify-between text-xs font-semibold text-slate-500">
                                 <span>Progress</span>
-                                <span>0%</span>
+                                <span>{stats.progress[MathTopic.POWERS] || 0}%</span>
                             </div>
-                            <ProgressBar progress={0} color="bg-emerald-500" />
+                            <ProgressBar progress={stats.progress[MathTopic.POWERS] || 0} color="bg-emerald-500" />
                         </div>
                         <div className="mt-6 flex justify-end">
                             <span className="text-sm font-semibold text-emerald-600 group-hover:translate-x-1 transition-transform">Start Learning →</span>
@@ -173,9 +184,9 @@ const MathDashboard: React.FC<{ onSelectTopic: (topic: MathTopic) => void; onExi
                         <div className="space-y-2">
                             <div className="flex justify-between text-xs font-semibold text-slate-500">
                                 <span>Progress</span>
-                                <span>0%</span>
+                                <span>{stats.progress[MathTopic.ROOTS] || 0}%</span>
                             </div>
-                            <ProgressBar progress={0} color="bg-amber-500" />
+                            <ProgressBar progress={stats.progress[MathTopic.ROOTS] || 0} color="bg-amber-500" />
                         </div>
                         <div className="mt-6 flex justify-end">
                             <span className="text-sm font-semibold text-amber-600 group-hover:translate-x-1 transition-transform">Start Learning →</span>
@@ -224,7 +235,6 @@ const PracticeSession: React.FC<{ topic: MathTopic; onFinish: () => void; onEarn
     const [selectedOption, setSelectedOption] = useState<number | null>(null);
     const [isAnswered, setIsAnswered] = useState(false);
     const [isCorrect, setIsCorrect] = useState(false);
-    const [score, setScore] = useState(0);
     const [showHint, setShowHint] = useState(false);
 
     const handleNext = () => {
@@ -233,10 +243,8 @@ const PracticeSession: React.FC<{ topic: MathTopic; onFinish: () => void; onEarn
             return;
         }
         
-        // Adaptive Difficulty Logic
         let nextDiff = difficulty;
         if (isCorrect && !showHint && difficulty !== DifficultyLevel.EXPERT) {
-             // Simple adaptive: Correct without hint -> potentially harder
              if (Math.random() > 0.5) {
                  if (difficulty === DifficultyLevel.BEGINNER) nextDiff = DifficultyLevel.INTERMEDIATE;
                  else if (difficulty === DifficultyLevel.INTERMEDIATE) nextDiff = DifficultyLevel.ADVANCED;
@@ -251,14 +259,32 @@ const PracticeSession: React.FC<{ topic: MathTopic; onFinish: () => void; onEarn
         setShowHint(false);
     };
 
-    const handleCheck = () => {
+    const handleCheck = async () => {
         if (selectedOption === null) return;
         const correct = selectedOption === currentProblem.correctAnswer;
         setIsCorrect(correct);
         if (correct) {
-            setScore(prev => prev + 1);
-            // Award 10 XP for correct answer
             onEarnXP(10);
+            
+            // SAVE PROGRESS
+            const user = await getCurrentSession();
+            if (user) {
+                const stats = user.math_stats || { streak: 0, solved: 0, lastPlayed: 0, progress: {} };
+                stats.solved += 1;
+                
+                // Update topic progress (simple increment for now)
+                const currentProg = stats.progress[topic] || 0;
+                if (currentProg < 100) stats.progress[topic] = Math.min(100, currentProg + 2);
+                
+                // Streak logic (basic)
+                const now = Date.now();
+                if (now - stats.lastPlayed > 24 * 60 * 60 * 1000) {
+                    stats.streak += 1;
+                }
+                stats.lastPlayed = now;
+                
+                await saveMathProgress(user.username, stats, 10);
+            }
         }
         setIsAnswered(true);
     };

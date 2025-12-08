@@ -71,14 +71,22 @@ export interface Lesson {
 
 // --- Auth Types ---
 
+export interface MathStats {
+  streak: number;
+  solved: number;
+  lastPlayed: number;
+  progress: Record<string, number>; // Topic -> %
+}
+
 export interface UserProfile {
   username: string;
   learningIndex: number;
   learnedWords: string[];
   mistakes: Record<string, number>;
-  xp: number; // Added XP for leaderboard
+  xp: number; 
   isPublic?: boolean;
   srs_state?: Record<string, SRSState>;
+  math_stats?: MathStats;
 }
 
 // --- ADVANCED BETA TYPES ---

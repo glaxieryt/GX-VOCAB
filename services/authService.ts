@@ -1,5 +1,5 @@
 
-import { UserProfile } from '../types';
+import { UserProfile, MathStats } from '../types';
 
 const USERS_KEY = 'gx_users_db';
 const SESSION_KEY = 'gx_current_session';
@@ -46,10 +46,9 @@ export const signUp = async (username: string, password: string, isPublic: boole
                 learning_index: 0,
                 learned_words: [],
                 mistakes: {},
-                xp: 0, // Init XP
+                xp: 0,
                 is_public: isPublic
-                // NOTE: srs_state removed to prevent error if column is missing.
-                // It will be added on first saveSRSState.
+                // NOTE: srs_state & math_stats removed to prevent error if columns missing.
             };
 
             const createRes = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
@@ -71,7 +70,8 @@ export const signUp = async (username: string, password: string, isPublic: boole
                 mistakes: {},
                 xp: 0,
                 isPublic: isPublic,
-                srs_state: {}
+                srs_state: {},
+                math_stats: { streak: 0, solved: 0, lastPlayed: 0, progress: {} }
             };
         } catch (e: any) {
             console.error("SignUp Exception:", e);
@@ -90,7 +90,8 @@ export const signUp = async (username: string, password: string, isPublic: boole
         mistakes: {},
         xp: 0,
         isPublic: isPublic,
-        srs_state: {}
+        srs_state: {},
+        math_stats: { streak: 0, solved: 0, lastPlayed: 0, progress: {} }
     };
     db[cleanUser] = newUser;
     saveLocalDB(db);
@@ -124,7 +125,8 @@ export const signIn = async (username: string, password: string): Promise<UserPr
                 mistakes: user.mistakes || {},
                 xp: user.xp || 0,
                 isPublic: user.is_public ?? true,
-                srs_state: user.srs_state || {} 
+                srs_state: user.srs_state || {},
+                math_stats: user.math_stats || { streak: 0, solved: 0, lastPlayed: 0, progress: {} }
             };
         } catch (e: any) {
              throw typeof e === 'string' ? e : "Login failed.";
@@ -163,7 +165,8 @@ export const getCurrentSession = async (): Promise<UserProfile | null> => {
                     mistakes: user.mistakes || {},
                     xp: user.xp || 0,
                     isPublic: user.is_public ?? true,
-                    srs_state: user.srs_state || {}
+                    srs_state: user.srs_state || {},
+                    math_stats: user.math_stats || { streak: 0, solved: 0, lastPlayed: 0, progress: {} }
                 };
             }
         } catch (e) { console.error("Session sync failed", e); }
@@ -178,7 +181,8 @@ export const getCurrentSession = async (): Promise<UserProfile | null> => {
         mistakes: user.mistakes || {},
         xp: user.xp || 0,
         isPublic: user.isPublic ?? true,
-        srs_state: user.srs_state || {}
+        srs_state: user.srs_state || {},
+        math_stats: user.math_stats || { streak: 0, solved: 0, lastPlayed: 0, progress: {} }
     } : null;
 };
 
@@ -239,7 +243,6 @@ export const recordMistake = async (username: string, wordId: string) => {
 export const getLeaderboard = async (): Promise<{username: string, score: number}[]> => {
     if (hasSupabase) {
         try {
-            // Sort by XP now instead of learning_index
             const res = await fetch(`${SUPABASE_URL}/rest/v1/users?xp=gt.0&select=username,xp,is_public&order=xp.desc&limit=100`, {
                 method: 'GET', 
                 headers: apiHeaders
@@ -253,7 +256,6 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
                 score: u.xp || 0
             }));
         } catch (e) {
-            console.error("Leaderboard error", e);
             return [];
         }
     } else {
@@ -270,6 +272,7 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
 export const saveSRSState = async (username: string, srsState: Record<string, any>, addedXp: number = 0) => {
     if (hasSupabase) {
         try {
+            // Optimistic update - Fetch current to get latest XP if available
             const getRes = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
                 method: 'GET', headers: apiHeaders
             });
@@ -310,3 +313,40 @@ export const getSRSState = async (username: string): Promise<Record<string, any>
     }
     return {};
 }
+
+export const saveMathProgress = async (username: string, stats: MathStats, addedXp: number = 0) => {
+    if (hasSupabase) {
+        try {
+            const getRes = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
+                method: 'GET', headers: apiHeaders
+            });
+            const users = await getRes.json();
+            const currentXp = users[0]?.xp || 0;
+            const newXp = currentXp + addedXp;
+
+            await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
+                method: 'PATCH',
+                headers: apiHeaders,
+                body: JSON.stringify({ math_stats: stats, xp: newXp })
+            });
+        } catch (e) { console.error("Math Sync failed", e); }
+    } else {
+        const db = getLocalDB();
+        if(db[username]) {
+            db[username].math_stats = stats;
+            db[username].xp = (db[username].xp || 0) + addedXp;
+            saveLocalDB(db);
+        }
+    }
+}
+export const saveWordProgress = async (userId: string, wordId: string, status: string, confidenceLevel: number, nextReview: number, reviewCount: number) => {
+  await supabase.from('als_word_progress').upsert({
+    user_id: userId,
+    word_id: wordId,
+    status: status,
+    confidence_level: confidenceLevel,
+    last_reviewed: new Date().toISOString(),
+    next_review: new Date(nextReview).toISOString(),
+    review_count: reviewCount
+  });
+};
