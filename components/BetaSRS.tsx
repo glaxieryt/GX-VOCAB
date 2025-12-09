@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { allWords } from '../data';
 import { Word, SRSState, RichVocabularyCard } from '../types';
 import { generateRichVocabularyData, generateWordImage, speakText } from '../services/geminiService';
-import { saveSRSState, getSRSState, getCurrentSession } from '../services/authService';
+import { saveSRSState, getSRSState, getCurrentSession, saveWordProgress } from '../services/authService';
 import { playSuccessSound, playErrorSound } from '../services/audioService';
 import Button from './Button';
 
@@ -38,53 +37,40 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
     // Stats
     const [sessionStats, setSessionStats] = useState({ correct: 0, total: 0 });
 
-    // Load Data on Mount - CRITICAL FIX
+    const loadInitialState = async () => {
+        const session = await getCurrentSession();
+        if (session) {
+            setUser(session.username);
+            // This is the most important part: load the saved state.
+            setSrsState(session.srs_state || {});
+        } else {
+            const localData = localStorage.getItem('gx_beta_srs');
+            setSrsState(localData ? JSON.parse(localData) : {});
+        }
+    };
+
     useEffect(() => {
-        const init = async () => {
-            const u = await getCurrentSession();
-            setUser(u?.username || null);
-            
-            if (u) {
-                // Force fetch from DB to ensure we have latest state
-                const loadedSRS = await getSRSState(u.username);
-                setSrsState(loadedSRS);
-            } else {
-                const local = localStorage.getItem('gx_beta_srs');
-                if (local) setSrsState(JSON.parse(local));
-            }
-        };
-        init();
+        loadInitialState();
     }, []);
 
     const startSession = () => {
-        // Build Queue: Due Reviews + 5 New Words
         const now = Date.now();
-        const due = allWords.filter(w => {
-            const s = (srsState as any)[w.id];
-            return s && s.nextReview <= now;
-        });
-        
-        // Also include words in "learning" phase (interval < 1 day) even if not strictly due yet to allow continuous learning
-        const learning = allWords.filter(w => {
-             const s = (srsState as any)[w.id];
-             return s && s.interval < 1 && s.nextReview > now;
-        });
+        const dueReviews = allWords.filter(w => {
+            const state = srsState[w.id];
+            return state && state.nextReview <= now;
+        }).sort((a,b) => (srsState[a.id].interval || 0) - (srsState[b.id].interval || 0)); // Prioritize older reviews
 
-        const newWords = allWords.filter(w => !(srsState as any)[w.id]).slice(0, 5); 
+        const newWords = allWords.filter(w => !srsState[w.id]).slice(0, 5);
         
-        const newQueue = [...due, ...learning, ...newWords];
-        // Unique words only
-        const uniqueQueue = Array.from(new Set(newQueue.map(w => w.id)))
-            .map(id => newQueue.find(w => w.id === id)!);
-
-        if (uniqueQueue.length === 0) {
-            alert("No words due for review and no new words available!");
+        const sessionQueue = [...dueReviews, ...newWords];
+        if (sessionQueue.length === 0) {
+            alert("Congratulations! No new words or reviews for today.");
             return;
         }
         
-        setQueue(uniqueQueue);
+        setQueue(sessionQueue);
         setQueueIndex(0);
-        loadWordData(uniqueQueue[0]);
+        loadWordData(sessionQueue[0]);
     };
 
     const loadWordData = async (word: Word) => {
@@ -92,14 +78,11 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         setImageUrl(null);
         setLoadingImage(false);
         try {
-            // Check cache or generate text content
             const data = await generateRichVocabularyData(word);
             setCurrentCard(data);
             setPhase('PHASE1_ENCODING');
-            setTimeLeft(45); // Reset timer
+            setTimeLeft(45);
             speakText(data.word);
-            
-            // Trigger Image Gen
             if (data.memoryHooks.visual) {
                 setLoadingImage(true);
                 generateWordImage(data.memoryHooks.visual).then(url => {
@@ -108,16 +91,15 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
                 });
             }
         } catch (e) {
-            alert("Failed to generate content. Please try again.");
+            alert("AI content generation failed. Please check your connection or API key and try again.");
             setPhase('DASHBOARD');
         }
     };
 
-    // --- PHASE 1: ENCODING ---
     useEffect(() => {
         if (phase === 'PHASE1_ENCODING' && timeLeft > 0) {
-            const t = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
-            return () => clearTimeout(t);
+            const timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
+            return () => clearTimeout(timer);
         }
     }, [phase, timeLeft]);
 
@@ -127,7 +109,6 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         resetExerciseState();
     };
 
-    // --- PHASE 2: EXERCISES ---
     const resetExerciseState = () => {
         setFeedback('IDLE');
         setSelectedOption(null);
@@ -137,28 +118,17 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
     const handleCheck = () => {
         if (!currentCard) return;
         const exercise = currentCard.exercises[currentExerciseIdx];
-        let correct = false;
-
+        let isCorrect = false;
         if (exercise.options) {
-             // Multiple Choice
-             if (selectedOption !== null && exercise.options[selectedOption].correct) correct = true;
-        } else if (exercise.type === 'reverse_definition') {
-             if (inputVal.toLowerCase().trim() === currentCard.word.toLowerCase()) correct = true;
-        } else if (exercise.type === 'sentence_creation') {
-             if (inputVal.length > 5 && inputVal.toLowerCase().includes(currentCard.word.toLowerCase())) correct = true;
+             isCorrect = selectedOption !== null && exercise.options[selectedOption].correct;
+        } else {
+             isCorrect = inputVal.toLowerCase().trim() === currentCard.word.toLowerCase();
         }
 
-        if (correct) {
-            setFeedback('CORRECT');
-            playSuccessSound();
-            setSessionStats(prev => ({ ...prev, correct: prev.correct + 1, total: prev.total + 1 }));
-            // Award XP for correct exercise
-            onEarnXP(10);
-        } else {
-            setFeedback('WRONG');
-            playErrorSound();
-            setSessionStats(prev => ({ ...prev, total: prev.total + 1 }));
-        }
+        setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
+        isCorrect ? playSuccessSound() : playErrorSound();
+        setSessionStats(prev => ({ correct: prev.correct + (isCorrect ? 1 : 0), total: prev.total + 1 }));
+        if (isCorrect) onEarnXP(10);
     };
 
     const nextExercise = () => {
@@ -171,50 +141,50 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         }
     };
 
-    // --- PHASE 3: SM-2 ALGORITHM & SAVE ---
-    const handleConfidence = (rating: number) => {
+    const handleConfidence = async (rating: number) => {
         const wordId = queue[queueIndex].id;
-        const currentSRS = (srsState as any)[wordId] || { interval: 0, nextReview: 0, easeFactor: 2.5, streak: 0 };
+        const currentSRS = srsState[wordId] || { interval: 0, nextReview: 0, easeFactor: 2.5, streak: 0 };
         
-        let newInterval = 0;
-        let newEase = currentSRS.easeFactor;
-        let newStreak = currentSRS.streak;
-
+        let { interval, easeFactor, streak } = currentSRS;
         if (rating >= 3) {
-            // Success
-            if (newStreak === 0) newInterval = 1;
-            else if (newStreak === 1) newInterval = 3;
-            else newInterval = Math.ceil(currentSRS.interval * newEase);
-            
-            newStreak++;
-            newEase = newEase + (0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02));
-            if (newEase < 1.3) newEase = 1.3;
+            if (streak === 0) interval = 1;
+            else if (streak === 1) interval = 3;
+            else interval = Math.ceil(interval * easeFactor);
+            streak++;
+            easeFactor += (0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02));
+            if (easeFactor < 1.3) easeFactor = 1.3;
         } else {
-            // Fail
-            newStreak = 0;
-            newInterval = 1; // Reset to 1 day
+            streak = 0;
+            interval = 1;
         }
+        
+        const nextReviewDate = Date.now() + (interval * 24 * 60 * 60 * 1000);
+        const newSrsData: SRSState = { interval, nextReview: nextReviewDate, easeFactor, streak };
+        const newSrsState = { ...srsState, [wordId]: newSrsData };
+        
+        setSrsState(newSrsState); // Optimistic UI update
 
-        const nextReviewDate = Date.now() + (newInterval * 24 * 60 * 60 * 1000);
-        const newState = { ...srsState, [wordId]: { interval: newInterval, nextReview: nextReviewDate, easeFactor: newEase, streak: newStreak } };
+        const statusMap: Record<number, string> = { 5: 'mastery', 4: 'confident', 3: 'moderate', 2: 'weak', 1: 'unfamiliar' };
         
-        // IMMEDIATE UPDATE
-        setSrsState(newState);
-        
-        // IMMEDIATE PERSIST - CRITICAL
         if (user) {
-            // Award 50 XP for completing the word
-            saveSRSState(user, newState, 50);
-            onEarnXP(50);
+            try {
+                // Fire and forget, UI has already updated.
+                await Promise.all([
+                    saveSRSState(user, newSrsState, 50),
+                    saveWordProgress(user, wordId, statusMap[rating], rating, nextReviewDate, streak)
+                ]);
+                onEarnXP(50);
+            } catch (e) {
+                console.error("Failed to save progress to Supabase:", e);
+                // Optionally, show a "Save failed" toast message
+            }
         } else {
-            localStorage.setItem('gx_beta_srs', JSON.stringify(newState));
+            localStorage.setItem('gx_beta_srs', JSON.stringify(newSrsState));
         }
 
-        // GO TO SUMMARY PHASE (Intermission)
         setPhase('PHASE4_SUMMARY');
     };
 
-    // --- PHASE 4: CONTINUE OR EXIT ---
     const handleContinue = () => {
         if (queueIndex < queue.length - 1) {
             setQueueIndex(prev => prev + 1);
@@ -224,16 +194,12 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         }
     };
 
-    const handleExitLesson = () => {
-        // Return to Dashboard, not App Home
+    const handleExitLesson = async () => {
         setPhase('DASHBOARD');
-        // Reload state to ensure sync
-        if(user) {
-             getSRSState(user).then(s => setSrsState(s));
-        }
+        await loadInitialState(); // Re-fetch from DB to update dashboard stats
     };
 
-    // --- HELPER COMPONENTS ---
+    // ... All JSX renderers remain the same ...
     const SessionHeader = () => (
         <div className="flex justify-between items-center mb-6 px-1">
             <Button variant="secondary" onClick={handleExitLesson} className="px-3 py-1.5 h-auto text-xs flex items-center gap-1">
@@ -246,15 +212,10 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         </div>
     );
 
-    // --- RENDERERS ---
-
     if (phase === 'DASHBOARD') {
-        const mastered = Object.values(srsState).filter((s: any) => s.interval > 21).length;
-        const due = allWords.filter(w => {
-            const s = (srsState as any)[w.id];
-            return s && s.nextReview <= Date.now();
-        }).length;
-
+        // FIX: Explicitly type `s` as SRSState to fix `s.interval` access error.
+        const mastered = Object.values(srsState).filter((s: SRSState) => s.interval > 21).length;
+        const due = allWords.filter(w => srsState[w.id] && srsState[w.id].nextReview <= Date.now()).length;
         return (
             <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 flex flex-col items-center">
                 <div className="w-full max-w-4xl">
@@ -262,7 +223,6 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
                          <h1 className="text-3xl font-black font-serif dark:text-white">Advanced Learning System</h1>
                          <button onClick={onExit} className="text-sm underline text-zinc-500 hover:text-black dark:hover:text-white transition-colors">Exit Beta</button>
                     </div>
-
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
                         <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-800 text-center">
                             <span className="text-4xl block mb-2">🧠</span>
@@ -280,14 +240,8 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
                             <span className="text-xs uppercase tracking-widest text-zinc-500">To Learn</span>
                         </div>
                     </div>
-
                     <div className="text-center">
-                        <button 
-                            onClick={startSession}
-                            className="bg-black dark:bg-white text-white dark:text-black text-xl font-bold py-4 px-12 rounded-full hover:scale-105 transition-transform shadow-xl"
-                        >
-                            Start Session
-                        </button>
+                        <button onClick={startSession} className="bg-black dark:bg-white text-white dark:text-black text-xl font-bold py-4 px-12 rounded-full hover:scale-105 transition-transform shadow-xl">Start Session</button>
                     </div>
                 </div>
             </div>
@@ -315,23 +269,19 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
              </div>
          );
     }
+    
+    if (!currentCard) return null; // Should not happen after loading
 
-    if (!currentCard) return null;
-
-    // --- PHASE 1 RENDER: ENCODING ---
     if (phase === 'PHASE1_ENCODING') {
         return (
             <div className="min-h-screen bg-[#F7F9FC] dark:bg-zinc-950 p-4 md:p-6 flex flex-col">
                 <div className="max-w-3xl mx-auto w-full flex-1 flex flex-col">
                     <SessionHeader />
-                    
                     <div className="flex justify-between items-center mb-6">
                          <span className="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full">INITIAL ENCODING</span>
                          <span className="text-sm font-mono text-zinc-400">Timer: {timeLeft}s</span>
                     </div>
-
                     <div className="bg-white dark:bg-zinc-900 p-6 md:p-8 rounded-3xl shadow-xl border border-zinc-200 dark:border-zinc-800 flex-1 overflow-y-auto">
-                        {/* Word Header */}
                         <div className="text-center mb-10 pb-8 border-b border-zinc-100 dark:border-zinc-800">
                             <h1 className="text-5xl md:text-6xl font-black text-black dark:text-white mb-4 tracking-tight">{currentCard.word}</h1>
                             <div className="flex items-center justify-center gap-4 text-zinc-500">
@@ -343,16 +293,10 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
                                 <span className="text-xs uppercase font-bold tracking-widest text-zinc-400">• Level {currentCard.metadata.difficulty}/10</span>
                             </div>
                         </div>
-
-                        {/* Definition */}
                         <div className="mb-10 text-center">
                             <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3">Definition</h3>
-                            <p className="text-2xl font-serif text-zinc-800 dark:text-zinc-200 leading-relaxed max-w-lg mx-auto">
-                                {currentCard.definition.primary}
-                            </p>
+                            <p className="text-2xl font-serif text-zinc-800 dark:text-zinc-200 leading-relaxed max-w-lg mx-auto">{currentCard.definition.primary}</p>
                         </div>
-
-                        {/* Etymology & Visual */}
                         <div className="grid md:grid-cols-2 gap-6 mb-10">
                             <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-2xl border border-blue-100 dark:border-blue-900/30">
                                 <h3 className="text-xs font-bold uppercase tracking-widest text-blue-500 mb-2">Memory Hook</h3>
@@ -373,8 +317,6 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
                                 )}
                             </div>
                         </div>
-
-                        {/* Examples */}
                         <div>
                              <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-4 text-center">Context</h3>
                              <div className="space-y-4">
@@ -386,9 +328,8 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
                              </div>
                         </div>
                     </div>
-
                     <div className="mt-6">
-                        <Button fullWidth onClick={startExercises} disabled={timeLeft > 0 && false} className={timeLeft > 0 ? "opacity-50" : ""}>
+                        <Button fullWidth onClick={startExercises} disabled={timeLeft > 0}>
                             {timeLeft > 0 ? `Wait ${timeLeft}s to Digest` : "Start Exercises →"}
                         </Button>
                     </div>
@@ -396,17 +337,13 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
             </div>
         );
     }
-
-    // --- PHASE 2 RENDER: EXERCISES ---
-    const currentEx = currentCard.exercises[currentExerciseIdx];
     
+    const currentEx = currentCard.exercises[currentExerciseIdx];
     if (phase === 'PHASE2_EXERCISES' && currentEx) {
-        return (
+         return (
             <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-6 flex flex-col items-center">
                  <div className="max-w-2xl w-full flex-1 flex flex-col">
                       <SessionHeader />
-
-                      {/* Progress Header */}
                       <div className="mb-8">
                           <div className="flex justify-between text-xs font-bold uppercase text-zinc-400 mb-2">
                               <span>Exercise {currentExerciseIdx + 1} / {currentCard.exercises.length}</span>
@@ -416,89 +353,49 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
                               <div className="h-full bg-black dark:bg-white transition-all duration-500" style={{ width: `${((currentExerciseIdx)/currentCard.exercises.length)*100}%` }}></div>
                           </div>
                       </div>
-
-                      {/* Question Card */}
                       <div className="bg-white dark:bg-zinc-900 p-8 rounded-3xl shadow-lg border border-zinc-200 dark:border-zinc-800 flex-1 flex flex-col justify-center">
                            <h2 className="text-2xl font-serif font-bold text-center mb-8 dark:text-white leading-tight">
                                {currentEx.question || currentEx.definition || currentEx.instruction}
                            </h2>
-
                            {currentEx.options ? (
                                <div className="space-y-3">
                                    {currentEx.options.map((opt, i) => {
                                        let style = "bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 hover:border-black dark:hover:border-white text-black dark:text-white";
                                        if (feedback !== 'IDLE') {
-                                           if (opt.correct) style = "bg-green-100 border-green-500 text-green-800 dark:bg-green-900 dark:text-green-100 dark:border-green-500";
-                                           else if (i === selectedOption) style = "bg-red-100 border-red-500 text-red-800 dark:bg-red-900 dark:text-red-100 dark:border-red-500";
-                                           else style = "opacity-50 dark:text-zinc-500";
+                                           if (opt.correct) style = "border-green-500 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100";
+                                           else if (i === selectedOption) style = "border-red-500 bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100";
+                                           else style = "opacity-50 text-zinc-500";
                                        } else if (selectedOption === i) {
-                                           style = "border-black dark:border-white ring-1 ring-black dark:ring-white bg-white dark:bg-zinc-700";
+                                           style = "border-black dark:border-white ring-2 ring-black dark:ring-white";
                                        }
-
-                                       return (
-                                           <button 
-                                              key={i}
-                                              onClick={() => setSelectedOption(i)}
-                                              disabled={feedback !== 'IDLE'}
-                                              className={`w-full p-5 text-lg font-medium border-2 rounded-xl transition-all ${style} text-left`}
-                                           >
-                                               {opt.text}
-                                           </button>
-                                       )
+                                       return ( <button key={i} onClick={() => setSelectedOption(i)} disabled={feedback !== 'IDLE'} className={`w-full p-5 text-lg font-medium border-2 rounded-xl transition-all ${style} text-left`}>{opt.text}</button> )
                                    })}
                                </div>
                            ) : (
-                               <div className="space-y-4">
-                                   {currentEx.hints && (
-                                       <div className="text-sm text-zinc-500 text-center mb-4 italic">
-                                           Hint: {currentEx.hints[0].hint}
-                                       </div>
-                                   )}
-                                   <input 
-                                      value={inputVal}
-                                      onChange={(e) => setInputVal(e.target.value)}
-                                      disabled={feedback !== 'IDLE'}
-                                      className="w-full text-2xl p-4 border-b-2 border-zinc-300 dark:border-zinc-700 bg-transparent text-center outline-none focus:border-black dark:focus:border-white dark:text-white font-serif"
-                                      placeholder="Type your answer..."
-                                   />
-                               </div>
+                               <input value={inputVal} onChange={(e) => setInputVal(e.target.value)} disabled={feedback !== 'IDLE'} className="w-full text-2xl p-4 border-b-2 border-zinc-300 dark:border-zinc-700 bg-transparent text-center outline-none focus:border-black dark:focus:border-white dark:text-white font-serif" placeholder="Type your answer..." />
                            )}
-
-                           {/* Feedback Area */}
-                           {feedback !== 'IDLE' && (
-                               <div className={`mt-8 p-4 rounded-xl text-center ${feedback === 'CORRECT' ? 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
-                                    <p className="font-bold mb-1">{feedback === 'CORRECT' ? currentEx.feedback?.correct || "Correct!" : currentEx.feedback?.incorrect || "Incorrect."}</p>
-                               </div>
-                           )}
+                           {feedback !== 'IDLE' && ( <div className={`mt-8 p-4 rounded-xl text-center ${feedback === 'CORRECT' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}><p className="font-bold mb-1">{feedback === 'CORRECT' ? (currentEx.feedback?.correct || "Correct!") : (currentEx.feedback?.incorrect || "Incorrect.")}</p></div> )}
                       </div>
-
                       <div className="mt-8">
                           {feedback === 'IDLE' ? (
-                              <Button fullWidth onClick={handleCheck} disabled={(!selectedOption && selectedOption !== 0) && !inputVal}>
-                                  Check Answer
-                              </Button>
+                              <Button fullWidth onClick={handleCheck} disabled={(!selectedOption && selectedOption !== 0) && !inputVal}>Check Answer</Button>
                           ) : (
-                              <Button fullWidth onClick={nextExercise}>
-                                  Continue
-                              </Button>
+                              <Button fullWidth onClick={nextExercise}>Continue</Button>
                           )}
                       </div>
                  </div>
             </div>
         );
     }
-
-    // --- PHASE 3 RENDER: CONFIDENCE ---
+    
     if (phase === 'PHASE3_CONFIDENCE') {
         return (
             <div className="min-h-screen bg-white dark:bg-zinc-950 p-6 flex flex-col items-center justify-center">
                  <div className="max-w-xl w-full text-center flex-1 flex flex-col justify-center">
                       <SessionHeader />
-                      
                       <div className="flex-1 flex flex-col justify-center">
                         <h2 className="text-3xl font-serif font-bold mb-2 dark:text-white">Self Assessment</h2>
                         <p className="text-zinc-500 mb-10">How confident are you with "{currentCard.word}"?</p>
-
                         <div className="space-y-3">
                             {[
                                 { lvl: 5, label: "Mastery", sub: "I could teach this", days: 30 },
@@ -507,11 +404,7 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
                                 { lvl: 2, label: "Weak", sub: "Vaguely familiar", days: 3 },
                                 { lvl: 1, label: "Unfamiliar", sub: "Don't know it", days: 1 },
                             ].map((opt) => (
-                                <button
-                                    key={opt.lvl}
-                                    onClick={() => handleConfidence(opt.lvl)}
-                                    className="w-full p-4 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-black dark:hover:border-white hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-all flex justify-between items-center group bg-white dark:bg-zinc-950"
-                                >
+                                <button key={opt.lvl} onClick={() => handleConfidence(opt.lvl)} className="w-full p-4 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-black dark:hover:border-white hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-all flex justify-between items-center group bg-white dark:bg-zinc-950">
                                     <div className="text-left">
                                         <span className="font-bold block text-black dark:text-white group-hover:translate-x-1 transition-transform">{opt.label}</span>
                                         <span className="text-xs text-zinc-400">{opt.sub}</span>
@@ -526,32 +419,22 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         );
     }
 
-    // --- PHASE 4 RENDER: WORD SUMMARY & CHOICE (INTERMISSION) ---
     if (phase === 'PHASE4_SUMMARY') {
         return (
             <div className="min-h-screen bg-green-50 dark:bg-zinc-950 p-6 flex flex-col items-center justify-center">
                 <div className="max-w-md w-full bg-white dark:bg-zinc-900 p-8 rounded-3xl shadow-xl border border-green-100 dark:border-zinc-800 text-center animate-popIn">
-                    <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-3xl mx-auto mb-6">
-                        ✅
-                    </div>
+                    <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-3xl mx-auto mb-6">✅</div>
                     <h2 className="text-3xl font-serif font-bold text-black dark:text-white mb-2">Word Saved!</h2>
-                    <p className="text-zinc-500 dark:text-zinc-400 mb-8">
-                        You've completed <strong>{currentCard.word}</strong>.
-                    </p>
-
+                    <p className="text-zinc-500 dark:text-zinc-400 mb-8">You've completed <strong>{currentCard.word}</strong>.</p>
                     <div className="space-y-4">
-                        <Button fullWidth onClick={handleContinue} className="h-14 text-lg">
-                            Continue to Next Word →
-                        </Button>
-                        <Button fullWidth variant="secondary" onClick={handleExitLesson} className="h-14">
-                            Exit to Dashboard
-                        </Button>
+                        <Button fullWidth onClick={handleContinue} className="h-14 text-lg">Continue to Next Word →</Button>
+                        <Button fullWidth variant="secondary" onClick={handleExitLesson} className="h-14">Exit to Dashboard</Button>
                     </div>
                 </div>
             </div>
         );
     }
-
+    
     return null;
 };
 
