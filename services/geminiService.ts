@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion, RichVocabularyCard } from '../types';
 import { allWords } from '../data';
@@ -113,7 +114,7 @@ export const speakText = async (text: string) => {
                     },
                 },
             }),
-            20000 
+            30000 
         );
 
         // Robust check for audio data
@@ -190,7 +191,7 @@ export const getEasyMeaning = async (word: string, context?: string): Promise<st
             model: 'gemini-2.5-flash',
             contents: prompt,
         }),
-        8000
+        10000
     );
 
     return response.text?.trim() || "No simple meaning available.";
@@ -208,7 +209,7 @@ export const getSentence = async (word: string, meaning: string): Promise<string
                 model: 'gemini-2.5-flash',
                 contents: prompt,
             }),
-            8000
+            10000
         );
         return response.text?.trim() || "";
     } catch (e) {
@@ -231,7 +232,7 @@ export const generateContextQuizQuestion = async (word: Word, distractors: strin
                 model: 'gemini-2.5-flash',
                 contents: prompt,
             }),
-            10000
+            15000
         );
         
         let sentence = response.text?.trim() || "";
@@ -282,7 +283,7 @@ export const generateLessonContent = async (word: Word): Promise<Lesson> => {
             contents: prompt,
             config: { responseMimeType: "application/json" }
         }),
-        12000
+        20000
     );
 
     const data = JSON.parse(response.text || "{}");
@@ -335,7 +336,7 @@ export const generateReviewQuestion = async (word: Word): Promise<LearningQuesti
                 contents: prompt,
                 config: { responseMimeType: "application/json" }
             }),
-            8000
+            12000
         );
         const d = JSON.parse(response.text || "{}");
         const opts = [
@@ -426,7 +427,7 @@ export const generateRichVocabularyData = async (word: Word): Promise<RichVocabu
                 contents: prompt,
                 config: { responseMimeType: "application/json" }
             }),
-            25000 // Increased timeout to 25s for large rich content
+            45000 // Increased timeout for large rich content
         );
         const text = response.text || "{}";
         const data = JSON.parse(text);
@@ -448,7 +449,7 @@ export const generateWordImage = async (visualDescription: string): Promise<stri
                 model: 'gemini-2.5-flash-image', 
                 contents: `Create a simple, minimalist educational illustration representing: ${visualDescription}`,
             }),
-            15000
+            30000
         );
 
         if (response.candidates?.[0]?.content?.parts) {
