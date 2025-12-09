@@ -45,7 +45,7 @@ export const signUp = async (username: string, password: string, isPublic: boole
 
     if (hasSupabase) {
         const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${cleanUser}&select=username`, {
-            method: 'GET', headers: apiHeaders
+            method: 'GET', headers: apiHeaders, cache: 'no-cache'
         });
         const existing = await checkRes.json();
         if (existing && existing.length > 0) throw "Username already taken.";
@@ -93,7 +93,7 @@ export const signIn = async (username: string, password: string): Promise<UserPr
 
     if (hasSupabase) {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${cleanUser}&select=*`, {
-            method: 'GET', headers: apiHeaders
+            method: 'GET', headers: apiHeaders, cache: 'no-cache'
         });
         
         if (!res.ok) throw "Database connection error";
@@ -125,7 +125,7 @@ export const getCurrentSession = async (): Promise<UserProfile | null> => {
     if (hasSupabase) {
         try {
             const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=*`, {
-                method: 'GET', headers: apiHeaders
+                method: 'GET', headers: apiHeaders, cache: 'no-cache'
             });
             const users = await res.json();
             if (users && users.length > 0) {
@@ -145,7 +145,7 @@ export const saveUserProgress = async (username: string, learningIndex: number, 
 
     if (hasSupabase) {
         await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
-            method: 'PATCH', headers: apiHeaders, body: JSON.stringify(payload)
+            method: 'PATCH', headers: apiHeaders, body: JSON.stringify(payload), cache: 'no-cache'
         });
     } else {
         const db = getLocalDB();
@@ -164,7 +164,7 @@ export const recordMistake = async (username: string, wordId: string) => {
         try {
             // 1. Get current mistakes
             const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=mistakes`, {
-                method: 'GET', headers: apiHeaders
+                method: 'GET', headers: apiHeaders, cache: 'no-cache'
             });
             if (!res.ok) {
                 console.error("Failed to fetch mistakes");
@@ -180,7 +180,8 @@ export const recordMistake = async (username: string, wordId: string) => {
             await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
                 method: 'PATCH', 
                 headers: apiHeaders, 
-                body: JSON.stringify({ mistakes: currentMistakes })
+                body: JSON.stringify({ mistakes: currentMistakes }),
+                cache: 'no-cache'
             });
         } catch (e) {
             console.error("Failed to record mistake", e);
@@ -199,7 +200,7 @@ export const recordMistake = async (username: string, wordId: string) => {
 export const getLeaderboard = async (): Promise<{username: string, score: number}[]> => {
     if (hasSupabase) {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/users?xp=gt.0&select=username,xp,is_public&order=xp.desc&limit=100`, {
-            method: 'GET', headers: apiHeaders
+            method: 'GET', headers: apiHeaders, cache: 'no-cache'
         });
         if (!res.ok) return [];
         const users = await res.json();
@@ -228,14 +229,15 @@ export const saveSRSState = async (username: string, srsState: Record<string, an
     }
     try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=xp`, {
-            method: 'GET', headers: apiHeaders
+            method: 'GET', headers: apiHeaders, cache: 'no-cache'
         });
         const data = await res.json();
         const currentXp = data[0]?.xp || 0;
         await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
             method: 'PATCH',
             headers: apiHeaders,
-            body: JSON.stringify({ srs_state: srsState, xp: currentXp + addedXp })
+            body: JSON.stringify({ srs_state: srsState, xp: currentXp + addedXp }),
+            cache: 'no-cache'
         });
     } catch (e) { console.error("SRS Sync failed", e); }
 };
@@ -243,7 +245,7 @@ export const saveSRSState = async (username: string, srsState: Record<string, an
 export const getSRSState = async (username: string): Promise<Record<string, any>> => {
     if (hasSupabase) {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=srs_state`, {
-            method: 'GET', headers: apiHeaders
+            method: 'GET', headers: apiHeaders, cache: 'no-cache'
         });
         const data = await res.json();
         return data[0]?.srs_state || {};
@@ -263,14 +265,15 @@ export const saveMathProgress = async (username: string, stats: MathStats, added
     }
     try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=xp`, {
-            method: 'GET', headers: apiHeaders
+            method: 'GET', headers: apiHeaders, cache: 'no-cache'
         });
         const data = await res.json();
         const currentXp = data[0]?.xp || 0;
         await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
             method: 'PATCH',
             headers: apiHeaders,
-            body: JSON.stringify({ math_stats: stats, xp: currentXp + addedXp })
+            body: JSON.stringify({ math_stats: stats, xp: currentXp + addedXp }),
+            cache: 'no-cache'
         });
     } catch (e) { console.error("Math Sync failed", e); }
 };
@@ -285,7 +288,8 @@ export const saveWordProgress = async (
 ) => {
     if (!hasSupabase) return;
 
-    const payload = {
+    // Payload for POST (new record)
+    const postPayload = {
         user_id: username,
         word_id: wordId,
         status: status,
@@ -295,23 +299,55 @@ export const saveWordProgress = async (
         review_count: streak
     };
 
-    try {
-        // Use POST with 'Prefer: resolution=merge-duplicates' to perform an UPSERT.
-        // This will INSERT a new row, or UPDATE the existing one if the UNIQUE constraint (user_id, word_id) matches.
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/als_word_progress`, {
-            method: 'POST',
-            headers: {
-                ...apiHeaders,
-                'Prefer': 'resolution=merge-duplicates'
-            },
-            body: JSON.stringify(payload)
-        });
+    // Payload for PATCH (existing record) - don't include identifiers
+    const patchPayload = {
+        status: status,
+        confidence_level: confidence,
+        next_review: new Date(nextReview).toISOString(),
+        last_reviewed: new Date().toISOString(),
+        review_count: streak
+    };
 
-        if (!res.ok) {
-            const error = await res.json();
-            console.error("Failed to save word progress:", error);
+    try {
+        // 1. Check if a record exists for this user and word.
+        const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/als_word_progress?user_id=eq.${username}&word_id=eq.${wordId}&select=id`, {
+            method: 'GET',
+            headers: apiHeaders,
+            cache: 'no-cache'
+        });
+        
+        if (!checkRes.ok) {
+            console.error("Failed to check for existing word progress", await checkRes.json());
+            return;
+        }
+
+        const existing = await checkRes.json();
+
+        let saveRes;
+        if (existing && existing.length > 0) {
+            // 2. If it exists, PATCH it using its primary key `id`.
+            saveRes = await fetch(`${SUPABASE_URL}/rest/v1/als_word_progress?id=eq.${existing[0].id}`, {
+                method: 'PATCH',
+                headers: apiHeaders,
+                body: JSON.stringify(patchPayload),
+                cache: 'no-cache'
+            });
+        } else {
+            // 3. If not, POST to create it.
+            saveRes = await fetch(`${SUPABASE_URL}/rest/v1/als_word_progress`, {
+                method: 'POST',
+                headers: apiHeaders,
+                body: JSON.stringify(postPayload),
+                cache: 'no-cache'
+            });
+        }
+
+        if (!saveRes.ok) {
+            const error = await saveRes.json();
+            console.error("Failed to save word progress (upsert):", error);
             throw new Error(error.message);
         }
+
     } catch (e) {
         console.error("Network error saving word progress:", e);
     }

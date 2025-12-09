@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { allWords } from '../data';
 import { Word, SRSState, RichVocabularyCard } from '../types';
 import { generateRichVocabularyData, generateWordImage, speakText } from '../services/geminiService';
@@ -119,8 +119,11 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         if (!currentCard) return;
         const exercise = currentCard.exercises[currentExerciseIdx];
         let isCorrect = false;
+
         if (exercise.options) {
-             isCorrect = selectedOption !== null && exercise.options[selectedOption].correct;
+            if (selectedOption !== null) {
+                isCorrect = shuffledOptions[selectedOption].correct;
+            }
         } else {
              isCorrect = inputVal.toLowerCase().trim() === currentCard.word.toLowerCase();
         }
@@ -173,7 +176,7 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
                     saveSRSState(user, newSrsState, 50),
                     saveWordProgress(user, wordId, statusMap[rating], rating, nextReviewDate, streak)
                 ]);
-                onEarnXP(50);
+                // NOTE: onEarnXP removed from here to prevent double XP. saveSRSState handles it.
             } catch (e) {
                 console.error("Failed to save progress to Supabase:", e);
                 // Optionally, show a "Save failed" toast message
@@ -198,6 +201,18 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         setPhase('DASHBOARD');
         await loadInitialState(); // Re-fetch from DB to update dashboard stats
     };
+    
+    const currentEx = currentCard?.exercises[currentExerciseIdx];
+    const shuffledOptions = useMemo(() => {
+        if (!currentEx || !currentEx.options) return [];
+        const array = [...currentEx.options];
+        // Fisher-Yates shuffle for robust randomization
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }, [currentEx]);
 
     // ... All JSX renderers remain the same ...
     const SessionHeader = () => (
@@ -338,7 +353,6 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
         );
     }
     
-    const currentEx = currentCard.exercises[currentExerciseIdx];
     if (phase === 'PHASE2_EXERCISES' && currentEx) {
          return (
             <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4 md:p-6 flex flex-col items-center">
@@ -359,7 +373,7 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
                            </h2>
                            {currentEx.options ? (
                                <div className="space-y-3">
-                                   {currentEx.options.map((opt, i) => {
+                                   {shuffledOptions.map((opt, i) => {
                                        let style = "bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 hover:border-black dark:hover:border-white text-black dark:text-white";
                                        if (feedback !== 'IDLE') {
                                            if (opt.correct) style = "border-green-500 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100";
