@@ -4,7 +4,7 @@ import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion, RichVocabularyCard } from '../types';
 import { allWords } from '../data';
 
-// Safe API Key access
+// Assume the build environment will replace `process.env.API_KEY` with the actual key.
 const apiKey = process.env.API_KEY;
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 

@@ -4,10 +4,10 @@ const USERS_KEY = 'gx_users_db';
 const SESSION_KEY = 'gx_current_session';
 
 // --- SUPABASE CONFIG ---
-// Access environment variables via `process.env`, which are replaced at build time by Vite's `define` config.
-// This is more reliable than `import.meta.env` in some deployment environments.
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY || '';
+// Access environment variables directly via process.env.
+// Assume the build environment will replace these variables with their string values.
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY;
 
 const hasSupabase = !!(SUPABASE_URL && SUPABASE_KEY && SUPABASE_URL.startsWith('http'));
 
