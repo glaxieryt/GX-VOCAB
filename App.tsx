@@ -38,14 +38,19 @@ const App: React.FC = () => {
   const [leaderboard, setLeaderboard] = useState<{username: string, score: number}[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
+  // Function to sync user data from the source of truth (DB or localStorage)
+  const syncUserSession = async () => {
+    const session = await getCurrentSession();
+    if (session) {
+        setUser(session);
+        setLearningIndex(session.learningIndex);
+        setLearnedWords(session.learnedWords);
+    }
+  };
+
   useEffect(() => {
     const initSession = async () => {
-        const session = await getCurrentSession();
-        if (session) {
-            setUser(session);
-            setLearningIndex(session.learningIndex);
-            setLearnedWords(session.learnedWords);
-        }
+        await syncUserSession();
         setCheckingSession(false);
     };
     initSession();
@@ -216,12 +221,14 @@ const App: React.FC = () => {
   };
 
   const goHome = () => {
+    syncUserSession(); // Re-sync data when returning to home, e.g., from ALS
     setView(AppView.HOME);
     setSelectedGroup(null);
     setQuizResult(null);
   };
   
   const goSubjectSelection = () => {
+      syncUserSession(); // Also sync here for consistency when exiting modules
       setView(AppView.SUBJECT_SELECTION);
       setSelectedGroup(null);
       setQuizResult(null);
