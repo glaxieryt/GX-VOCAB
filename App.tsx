@@ -220,15 +220,15 @@ const App: React.FC = () => {
     }
   };
 
-  const goHome = () => {
-    syncUserSession(); // Re-sync data when returning to home, e.g., from ALS
+  const goHome = async () => {
+    await syncUserSession(); // Re-sync data when returning to home, e.g., from ALS
     setView(AppView.HOME);
     setSelectedGroup(null);
     setQuizResult(null);
   };
   
-  const goSubjectSelection = () => {
-      syncUserSession(); // Also sync here for consistency when exiting modules
+  const goSubjectSelection = async () => {
+      await syncUserSession(); // Also sync here for consistency when exiting modules
       setView(AppView.SUBJECT_SELECTION);
       setSelectedGroup(null);
       setQuizResult(null);
