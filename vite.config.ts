@@ -1,4 +1,3 @@
-
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -8,6 +7,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    chunkSizeWarningLimit: 1600, // <--- I added this line for you
   },
   // This 'define' block is crucial for Vercel deployment.
   // It takes the environment variables available during the build process (on Vercel's servers)
