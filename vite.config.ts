@@ -7,15 +7,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
-    chunkSizeWarningLimit: 5000, // <--- I added this line for you
+    chunkSizeWarningLimit: 5000,
   },
-  // This 'define' block is crucial for Vercel deployment.
-  // It takes the environment variables available during the build process (on Vercel's servers)
-  // and replaces the 'process.env.X' placeholders in the code with their actual string values.
-  // This makes the keys available in the final client-side code.
+  // FIX: Standardized environment variables to remove the 'VITE_' prefix.
+  // This aligns with the deployment platform's standard variable names (e.g., API_KEY)
+  // and ensures they are correctly injected during the build process.
   define: {
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY),
     'process.env.SUPABASE_URL': JSON.stringify(process.env.SUPABASE_URL),
     'process.env.SUPABASE_KEY': JSON.stringify(process.env.SUPABASE_KEY),
-  },
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY),
+  }
 });

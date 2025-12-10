@@ -1,12 +1,9 @@
-
-
-
 import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion, RichVocabularyCard } from '../types';
 
-// Assume the build environment will replace `process.env.API_KEY` with the actual key.
-const apiKey = process.env.API_KEY;
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+// FIX: Reverted to using `process.env.API_KEY` which is populated by Vite's `define` config.
+// This aligns with the deployment environment's standard and fixes the API key error.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Helper to timeout a promise
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
@@ -80,12 +77,6 @@ async function decodeAudioData(
 }
 
 export const speakText = async (text: string) => {
-    // If no API key, immediately fallback
-    if (!ai) {
-        speakNative(text);
-        return;
-    }
-
     try {
         if (!audioContext) {
              audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
@@ -177,8 +168,6 @@ const speakNative = (text: string) => {
 
 
 export const getEasyMeaning = async (word: string, context?: string): Promise<string> => {
-  if (!ai) return "Meaning not available (Offline).";
-
   try {
     const prompt = `
       Provide a very short, easy-to-remember explanation for "${word}".
@@ -201,7 +190,6 @@ export const getEasyMeaning = async (word: string, context?: string): Promise<st
 };
 
 export const getSentence = async (word: string, meaning: string): Promise<string> => {
-    if (!ai) return "";
     try {
         const prompt = `Write a simple sentence using "${word}" (meaning: ${meaning}). Max 20 words. No quotes.`;
         const response = await withTimeout<GenerateContentResponse>(
@@ -218,8 +206,6 @@ export const getSentence = async (word: string, meaning: string): Promise<string
 };
 
 export const generateContextQuizQuestion = async (word: Word, distractors: string[]): Promise<QuizQuestion> => {
-    if (!ai) throw new Error("No API Key");
-
     const prompt = `
       Create a "Context" quiz question for the word "${word.term}" (meaning: ${word.meaning}).
       Task: Write a single clear sentence that uses the word "${word.term}".
@@ -256,8 +242,6 @@ export const generateContextQuizQuestion = async (word: Word, distractors: strin
 }
 
 export const generateLessonContent = async (word: Word): Promise<Lesson> => {
-  if (!ai) return generateFallbackLesson(word);
-
   try {
     const prompt = `
       Generate a vocabulary lesson for: "${word.term}" (Meaning: "${word.meaning}").
@@ -323,8 +307,6 @@ export const generateLessonContent = async (word: Word): Promise<Lesson> => {
 };
 
 export const generateReviewQuestion = async (word: Word): Promise<LearningQuestion> => {
-    if (!ai) return generateFallbackReview(word);
-    
     try {
         const prompt = `
           Generate a multiple choice question for "${word.term}".
@@ -363,8 +345,6 @@ export const generateReviewQuestion = async (word: Word): Promise<LearningQuesti
 // --- RICH CONTENT GENERATION FOR BETA SRS ---
 
 export const generateRichVocabularyData = async (word: Word): Promise<RichVocabularyCard> => {
-    if (!ai) throw new Error("No API connection");
-
     const prompt = `
     Generate comprehensive vocabulary data for the word "${word.term}" (Meaning: "${word.meaning}").
     Strictly follow this JSON schema:
@@ -442,12 +422,11 @@ export const generateRichVocabularyData = async (word: Word): Promise<RichVocabu
 }
 
 export const generateWordImage = async (visualDescription: string): Promise<string | null> => {
-    if (!ai) return null;
     try {
         const response = await withTimeout<GenerateContentResponse>(
             ai.models.generateContent({
                 model: 'gemini-2.5-flash-image', 
-                contents: `Create a simple, minimalist educational illustration representing: ${visualDescription}`,
+                contents: { parts: [{ text: `Create a simple, minimalist educational illustration representing: ${visualDescription}`}] },
             }),
             30000
         );

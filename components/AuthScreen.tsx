@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { signIn, signUp, getConnectionStatus } from '../services/authService';
 import { UserProfile } from '../types';
@@ -87,6 +88,19 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
             </div>
 
             <div className="w-full max-w-sm border border-black dark:border-zinc-700 p-8 shadow-2xl bg-white dark:bg-zinc-900 rounded-sm relative">
+                {/* FIX: Add a prominent, clear warning banner for connection status. */}
+                {!isOnline && (
+                    <div className="mb-6 text-left text-sm p-4 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+                        <p className="font-bold mb-2">⚠️ Offline Mode Active</p>
+                        <p className="text-xs opacity-90">
+                            The app could not connect to the cloud database. Progress will only be saved in this browser.
+                        </p>
+                        <p className="text-xs opacity-90 mt-2">
+                            <strong>Action Required:</strong> Ensure `SUPABASE_URL` and `SUPABASE_KEY` are set in your deployment environment variables.
+                        </p>
+                    </div>
+                )}
+                
                 <div className="flex mb-8 border-b border-zinc-100 dark:border-zinc-800">
                     <button 
                         className={`flex-1 pb-4 text-sm font-bold uppercase tracking-widest transition-colors ${!isSignUp ? 'border-b-2 border-black dark:border-white text-black dark:text-white' : 'text-zinc-400 dark:text-zinc-500'}`}
@@ -190,13 +204,6 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthSuccess }) => {
                         {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
                     </Button>
                 </form>
-            </div>
-            
-            <div className="mt-8 flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}></div>
-                <span className="text-xs text-zinc-400 font-medium">
-                    {isOnline ? 'Cloud Sync Active' : 'Offline Mode (Local Storage)'}
-                </span>
             </div>
         </div>
     );

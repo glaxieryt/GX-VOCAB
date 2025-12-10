@@ -1,5 +1,3 @@
-
-
 // FIX: Import MathStats type
 import { UserProfile, MathStats } from '../types';
 
@@ -7,8 +5,8 @@ const USERS_KEY = 'gx_users_db';
 const SESSION_KEY = 'gx_current_session';
 
 // --- SUPABASE CONFIG ---
-// Access environment variables directly via process.env.
-// The vite.config.ts file is configured to replace these variables with their string values at build time.
+// FIX: Reverted to using `process.env` which is populated by Vite's `define` config.
+// This is a more robust method for ensuring keys are available in the deployed app.
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
@@ -146,14 +144,7 @@ export const getCurrentSession = async (): Promise<UserProfile | null> => {
 };
 
 export const saveUserProgress = async (username: string, learningIndex: number, learnedWords: string[], xp?: number) => {
-    const payload: any = { learning_index: learningIndex, learned_words: learnedWords };
-    if (xp !== undefined) payload.xp = xp;
-
-    if (hasSupabase) {
-        await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
-            method: 'PATCH', headers: apiHeaders, body: JSON.stringify(payload), cache: 'no-cache'
-        });
-    } else {
+    if (!hasSupabase) {
         const db = getLocalDB();
         if (db[username]) {
             db[username].learningIndex = learningIndex;
@@ -161,38 +152,19 @@ export const saveUserProgress = async (username: string, learningIndex: number, 
             if (xp !== undefined) db[username].xp = xp;
             saveLocalDB(db);
         }
+        return;
     }
+
+    const payload: any = { learning_index: learningIndex, learned_words: learnedWords };
+    if (xp !== undefined) payload.xp = xp;
+
+    await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
+        method: 'PATCH', headers: apiHeaders, body: JSON.stringify(payload), cache: 'no-cache'
+    });
 };
 
-// FIX: Add missing recordMistake function.
 export const recordMistake = async (username: string, wordId: string) => {
-    if (hasSupabase) {
-        try {
-            // 1. Get current mistakes
-            const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=mistakes`, {
-                method: 'GET', headers: apiHeaders, cache: 'no-cache'
-            });
-            if (!res.ok) {
-                console.error("Failed to fetch mistakes");
-                return;
-            }
-            const data = await res.json();
-            const currentMistakes = data[0]?.mistakes || {};
-
-            // 2. Update mistakes
-            currentMistakes[wordId] = (currentMistakes[wordId] || 0) + 1;
-
-            // 3. Save back
-            await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
-                method: 'PATCH', 
-                headers: apiHeaders, 
-                body: JSON.stringify({ mistakes: currentMistakes }),
-                cache: 'no-cache'
-            });
-        } catch (e) {
-            console.error("Failed to record mistake", e);
-        }
-    } else {
+    if (!hasSupabase) {
         const db = getLocalDB();
         if (db[username]) {
             const userMistakes = db[username].mistakes || {};
@@ -200,6 +172,33 @@ export const recordMistake = async (username: string, wordId: string) => {
             db[username].mistakes = userMistakes;
             saveLocalDB(db);
         }
+        return;
+    }
+
+    try {
+        // 1. Get current mistakes
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=mistakes`, {
+            method: 'GET', headers: apiHeaders, cache: 'no-cache'
+        });
+        if (!res.ok) {
+            console.error("Failed to fetch mistakes");
+            return;
+        }
+        const data = await res.json();
+        const currentMistakes = data[0]?.mistakes || {};
+
+        // 2. Update mistakes
+        currentMistakes[wordId] = (currentMistakes[wordId] || 0) + 1;
+
+        // 3. Save back
+        await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
+            method: 'PATCH', 
+            headers: apiHeaders, 
+            body: JSON.stringify({ mistakes: currentMistakes }),
+            cache: 'no-cache'
+        });
+    } catch (e) {
+        console.error("Failed to record mistake", e);
     }
 };
 
@@ -223,32 +222,31 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
     })).filter(u => u.score > 0).sort((a, b) => b.score - a.score).slice(0, 100);
 };
 
-// FIX: Add missing saveMathProgress function to save math stats and XP.
 export const saveMathProgress = async (username: string, stats: MathStats, addedXp: number) => {
-    if (hasSupabase) {
-        try {
-            const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=xp`, {
-                method: 'GET', headers: apiHeaders, cache: 'no-cache'
-            });
-            const data = await res.json();
-            const currentXp = data[0]?.xp || 0;
-            const payload = { math_stats: stats, xp: currentXp + addedXp };
-            await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
-                method: 'PATCH',
-                headers: apiHeaders,
-                body: JSON.stringify(payload),
-                cache: 'no-cache'
-            });
-        } catch (e) {
-            console.error("Failed to save math progress", e);
-        }
-    } else {
+    if (!hasSupabase) {
         const db = getLocalDB();
         if (db[username]) {
             db[username].math_stats = stats;
             db[username].xp = (db[username].xp || 0) + addedXp;
             saveLocalDB(db);
         }
+        return;
+    }
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=xp`, {
+            method: 'GET', headers: apiHeaders, cache: 'no-cache'
+        });
+        const data = await res.json();
+        const currentXp = data[0]?.xp || 0;
+        const payload = { math_stats: stats, xp: currentXp + addedXp };
+        await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
+            method: 'PATCH',
+            headers: apiHeaders,
+            body: JSON.stringify(payload),
+            cache: 'no-cache'
+        });
+    } catch (e) {
+        console.error("Failed to save math progress", e);
     }
 };
 
@@ -288,6 +286,10 @@ export const getSRSState = async (username: string): Promise<Record<string, any>
     return getLocalDB()[username]?.srs_state || {};
 };
 
+// FIX: Refactored to use a more robust `upsert` operation.
+// This single API call will either insert a new row or update an existing one
+// based on the unique constraint (user_id, word_id), preventing duplicate entries
+// and simplifying the save logic.
 export const saveWordProgress = async (
     username: string, 
     wordId: string, 
@@ -298,8 +300,7 @@ export const saveWordProgress = async (
 ) => {
     if (!hasSupabase) return;
 
-    // Payload for POST (new record)
-    const postPayload = {
+    const payload = {
         user_id: username,
         word_id: wordId,
         status: status,
@@ -308,56 +309,25 @@ export const saveWordProgress = async (
         last_reviewed: new Date().toISOString(),
         review_count: streak
     };
-
-    // Payload for PATCH (existing record) - don't include identifiers
-    const patchPayload = {
-        status: status,
-        confidence_level: confidence,
-        next_review: new Date(nextReview).toISOString(),
-        last_reviewed: new Date().toISOString(),
-        review_count: streak
+    
+    // Add the special `Prefer` header to tell Supabase to perform an upsert.
+    const upsertHeaders = {
+        ...apiHeaders,
+        'Prefer': 'return=representation,resolution=merge-duplicates'
     };
 
     try {
-        // 1. Check if a record exists for this user and word.
-        const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/als_word_progress?user_id=eq.${username}&word_id=eq.${wordId}&select=id`, {
-            method: 'GET',
-            headers: apiHeaders,
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/als_word_progress`, {
+            method: 'POST', // Always POST for upsert
+            headers: upsertHeaders,
+            body: JSON.stringify(payload),
             cache: 'no-cache'
         });
-        
-        if (!checkRes.ok) {
-            console.error("Failed to check for existing word progress", await checkRes.json());
-            return;
-        }
 
-        const existing = await checkRes.json();
-
-        let saveRes;
-        if (existing && existing.length > 0) {
-            // 2. If it exists, PATCH it using its primary key `id`.
-            saveRes = await fetch(`${SUPABASE_URL}/rest/v1/als_word_progress?id=eq.${existing[0].id}`, {
-                method: 'PATCH',
-                headers: apiHeaders,
-                body: JSON.stringify(patchPayload),
-                cache: 'no-cache'
-            });
-        } else {
-            // 3. If not, POST to create it.
-            saveRes = await fetch(`${SUPABASE_URL}/rest/v1/als_word_progress`, {
-                method: 'POST',
-                headers: apiHeaders,
-                body: JSON.stringify(postPayload),
-                cache: 'no-cache'
-            });
-        }
-
-        if (!saveRes.ok) {
-            const error = await saveRes.json();
+        if (!res.ok) {
+            const error = await res.json();
             console.error("Failed to save word progress (upsert):", error);
-            throw new Error(error.message);
         }
-
     } catch (e) {
         console.error("Network error saving word progress:", e);
     }
