@@ -38,6 +38,7 @@ const mapSupabaseUserToProfile = (user: any): UserProfile => ({
     xp: user.xp || 0,
     isPublic: user.is_public ?? true,
     srs_state: user.srs_state || {},
+    // FIX: Add math_stats with a default value to the user profile mapping.
     math_stats: user.math_stats || { streak: 0, solved: 0, lastPlayed: 0, progress: {} }
 });
 
@@ -83,6 +84,7 @@ export const signUp = async (username: string, password: string, isPublic: boole
         username: cleanUser,
         learningIndex: 0, learnedWords: [], mistakes: {}, xp: 0, isPublic,
         srs_state: {},
+        // FIX: Add default math_stats for new local users.
         math_stats: { streak: 0, solved: 0, lastPlayed: 0, progress: {} }
     };
     db[cleanUser] = { ...newUserProfile, password };
@@ -200,6 +202,35 @@ export const recordMistake = async (username: string, wordId: string) => {
     }
 };
 
+// FIX: Add missing saveMathProgress function.
+export const saveMathProgress = async (username: string, stats: MathStats, addedXp: number = 0) => {
+    if (hasSupabase) {
+        try {
+            const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=xp`, {
+                method: 'GET', headers: apiHeaders, cache: 'no-cache'
+            });
+            const data = await res.json();
+            const currentXp = data[0]?.xp || 0;
+            
+            const payload = {
+                math_stats: stats,
+                xp: currentXp + addedXp
+            };
+
+            await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
+                method: 'PATCH', headers: apiHeaders, body: JSON.stringify(payload), cache: 'no-cache'
+            });
+        } catch (e) { console.error("Failed to save math progress", e); }
+    } else {
+        const db = getLocalDB();
+        if (db[username]) {
+            db[username].math_stats = stats;
+            db[username].xp = (db[username].xp || 0) + addedXp;
+            saveLocalDB(db);
+        }
+    }
+};
+
 export const getLeaderboard = async (): Promise<{username: string, score: number}[]> => {
     if (hasSupabase) {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/users?xp=gt.0&select=username,xp,is_public&order=xp.desc&limit=100`, {
@@ -254,31 +285,6 @@ export const getSRSState = async (username: string): Promise<Record<string, any>
         return data[0]?.srs_state || {};
     }
     return getLocalDB()[username]?.srs_state || {};
-};
-
-export const saveMathProgress = async (username: string, stats: MathStats, addedXp: number = 0) => {
-    if (!hasSupabase) {
-        const db = getLocalDB();
-        if(db[username]) {
-            db[username].math_stats = stats;
-            db[username].xp = (db[username].xp || 0) + addedXp;
-            saveLocalDB(db);
-        }
-        return;
-    }
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=xp`, {
-            method: 'GET', headers: apiHeaders, cache: 'no-cache'
-        });
-        const data = await res.json();
-        const currentXp = data[0]?.xp || 0;
-        await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
-            method: 'PATCH',
-            headers: apiHeaders,
-            body: JSON.stringify({ math_stats: stats, xp: currentXp + addedXp }),
-            cache: 'no-cache'
-        });
-    } catch (e) { console.error("Math Sync failed", e); }
 };
 
 export const saveWordProgress = async (
