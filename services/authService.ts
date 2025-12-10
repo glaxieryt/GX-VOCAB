@@ -1,3 +1,4 @@
+
 import { UserProfile, MathStats } from '../types';
 
 const USERS_KEY = 'gx_users_db';
@@ -5,9 +6,9 @@ const SESSION_KEY = 'gx_current_session';
 
 // --- SUPABASE CONFIG ---
 // Access environment variables directly via process.env.
-// Assume the build environment will replace these variables with their string values.
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = process.env.VITE_SUPABASE_KEY;
+// The vite.config.ts file is configured to replace these variables with their string values at build time.
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
 const hasSupabase = !!(SUPABASE_URL && SUPABASE_KEY && SUPABASE_URL.startsWith('http'));
 
