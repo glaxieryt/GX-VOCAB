@@ -1,9 +1,9 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Word, Lesson, LearningQuestion } from '../types';
 import { generateLessonContent, generateReviewQuestion, speakText } from '../services/geminiService';
 import { playSuccessSound, playErrorSound } from '../services/audioService';
-import { allWords } from '../data';
 import Button from './Button';
 
 interface GuidedLearningProps {
@@ -29,11 +29,12 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
   onExit 
 }) => {
   const BATCH_SIZE = 10;
-  
+
+  const [allWords, setAllWords] = useState<Word[] | null>(null);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [mode, setMode] = useState<'LEARNING' | 'BATCH_REVIEW' | 'MISTAKE_CORRECTION'>('LEARNING');
   const [lesson, setLesson] = useState<Lesson | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [reviewQueue, setReviewQueue] = useState<LearningQuestion[]>([]);
   const [mistakesQueue, setMistakesQueue] = useState<Word[]>([]);
   const [step, setStep] = useState<'INTRO' | 'QUIZ'>('INTRO');
@@ -44,6 +45,7 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
 
   const loadNewWord = async (indexOverride?: number) => {
+    if (!allWords) return;
     setLoading(true);
     setMode('LEARNING');
     try {
@@ -86,8 +88,20 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
       } catch (e) { console.error(e); } 
       finally { setLoading(false); }
   };
+  
+  useEffect(() => {
+    const loadData = async () => {
+        const dataModule = await import('../data');
+        setAllWords(dataModule.allWords);
+    };
+    loadData();
+  }, []);
 
-  useEffect(() => { loadNewWord(); }, []);
+  useEffect(() => { 
+    if (allWords) {
+        loadNewWord(); 
+    }
+  }, [allWords]);
 
   const handleOptionClick = (optId: string) => {
     if (isChecked) return;
@@ -126,6 +140,8 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
   };
 
   const handleNext = async () => {
+    if (!allWords) return;
+
     if (mode === 'LEARNING') {
         if (!lesson) return;
         if (questionIdx < lesson.queue.length - 1) {
@@ -188,7 +204,7 @@ const GuidedLearning: React.FC<GuidedLearningProps> = ({
       );
   };
 
-  if (loading) {
+  if (loading || !allWords) {
       return (
           <div className="flex flex-col items-center justify-center min-h-[60vh] animate-pulse">
               <div className="w-12 h-12 border-4 border-zinc-200 dark:border-zinc-800 border-t-black dark:border-t-white rounded-full animate-spin mb-6"></div>

@@ -1,8 +1,8 @@
 
 
+
 import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
 import { Word, QuizQuestion, QuizQuestionType, Lesson, LearningQuestion, RichVocabularyCard } from '../types';
-import { allWords } from '../data';
 
 // Assume the build environment will replace `process.env.API_KEY` with the actual key.
 const apiKey = process.env.API_KEY;
@@ -466,8 +466,8 @@ export const generateWordImage = async (visualDescription: string): Promise<stri
     }
 };
 
-const generateFallbackLesson = (word: Word): Lesson => {
-    // ... (Fallback implementation same as before)
+const generateFallbackLesson = async (word: Word): Promise<Lesson> => {
+    const { allWords } = await import('../data');
     const fallbackQ = (idx: number): LearningQuestion => {
         const distractors = [];
         for(let i=0; i<3; i++) {
@@ -499,8 +499,8 @@ const generateFallbackLesson = (word: Word): Lesson => {
     };
 };
 
-const generateFallbackReview = (word: Word): LearningQuestion => {
-     // ... (Fallback review)
+const generateFallbackReview = async (word: Word): Promise<LearningQuestion> => {
+     const { allWords } = await import('../data');
      const distractors = [];
      for(let i=0; i<3; i++) {
           const r = Math.floor(Math.random() * allWords.length);

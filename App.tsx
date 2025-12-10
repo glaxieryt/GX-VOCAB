@@ -2,8 +2,7 @@
 
 // ... existing imports ...
 import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
-import { WordGroup, AppView, UserProfile } from './types';
-import { getGroupedData, allWords } from './data';
+import { WordGroup, AppView, UserProfile, Word } from './types';
 import { getCurrentSession, saveUserProgress, signOut, recordMistake, getLeaderboard } from './services/authService';
 import Button from './components/Button';
 import WordCard from './components/WordCard';
@@ -35,12 +34,17 @@ const App: React.FC = () => {
   const [selectedGroup, setSelectedGroup] = useState<WordGroup | null>(null);
   const [quizResult, setQuizResult] = useState<{score: number, total: number} | null>(null);
 
+  // Data State
+  const [groups, setGroups] = useState<WordGroup[] | null>(null);
+  const [allWords, setAllWords] = useState<Word[]>([]);
+
   // Learning Progress State
   const [learningIndex, setLearningIndex] = useState(0);
   const [learnedWords, setLearnedWords] = useState<string[]>([]);
   
   // Loading state
   const [checkingSession, setCheckingSession] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
 
   // Ask AI Popup State
   const [selectedText, setSelectedText] = useState<string | null>(null);
@@ -51,6 +55,14 @@ const App: React.FC = () => {
   // Leaderboard State
   const [leaderboard, setLeaderboard] = useState<{username: string, score: number}[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+  
+  const loadAppData = async () => {
+      setLoadingData(true);
+      const dataModule = await import('./data');
+      setGroups(dataModule.getGroupedData(30));
+      setAllWords(dataModule.allWords);
+      setLoadingData(false);
+  };
 
   // Function to sync user data from the source of truth (DB or localStorage)
   const syncUserSession = async () => {
@@ -59,6 +71,7 @@ const App: React.FC = () => {
         setUser(session);
         setLearningIndex(session.learningIndex);
         setLearnedWords(session.learnedWords);
+        await loadAppData(); // Load data if session exists
     }
   };
 
@@ -111,10 +124,11 @@ const App: React.FC = () => {
     };
   }, [selectedText]);
 
-  const handleAuthSuccess = (loggedInUser: UserProfile) => {
+  const handleAuthSuccess = async (loggedInUser: UserProfile) => {
       setUser(loggedInUser);
       setLearningIndex(loggedInUser.learningIndex);
       setLearnedWords(loggedInUser.learnedWords);
+      await loadAppData();
   };
 
   const handleSignOut = () => {
@@ -184,8 +198,6 @@ const App: React.FC = () => {
       setLoadingAi(false);
   };
 
-  const groups = useMemo(() => getGroupedData(30), []);
-
   const handleStartLearn = () => {
     setView(AppView.GROUP_SELECT_LEARN);
     setSelectedGroup(null);
@@ -202,7 +214,7 @@ const App: React.FC = () => {
   };
 
   const handleStartRevision = () => {
-      if (!user || !user.learnedWords || user.learnedWords.length === 0) {
+      if (!user || !user.learnedWords || user.learnedWords.length === 0 || allWords.length === 0) {
           alert("You haven't learned any words yet! Complete some daily lessons first.");
           return;
       }
@@ -634,6 +646,17 @@ const App: React.FC = () => {
 
   if (!user) {
       return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+  }
+  
+  if (loadingData) {
+       return (
+          <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center">
+              <div className="text-center">
+                  <div className="w-8 h-8 border-4 border-zinc-200 border-t-black dark:border-zinc-800 dark:border-t-white rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-zinc-500">Loading learning materials...</p>
+              </div>
+          </div>
+      );
   }
 
   // --- GLOBAL RENDER ---

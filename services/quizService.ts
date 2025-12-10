@@ -1,8 +1,10 @@
 
-import { Word, QuizQuestion, QuizQuestionType } from '../types';
-import { allWords } from '../data';
 
-export const generateQuiz = (words: Word[]): QuizQuestion[] => {
+import { Word, QuizQuestion, QuizQuestionType } from '../types';
+
+export const generateQuiz = async (words: Word[]): Promise<QuizQuestion[]> => {
+  const { allWords } = await import('../data');
+  
   return words.map((targetWord, index) => {
     // Determine question type:
     // If a sentence exists, ALWAYS use Context.

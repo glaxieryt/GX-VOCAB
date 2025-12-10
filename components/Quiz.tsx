@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { WordGroup, QuizQuestion, QuizQuestionType } from '../types';
 import { generateQuiz } from '../services/quizService';
@@ -22,8 +23,12 @@ const Quiz: React.FC<QuizProps> = ({ group, onFinish, onExit }) => {
   const [isCorrect, setIsCorrect] = useState(false);
 
   useEffect(() => {
-    const q = generateQuiz(group.words);
-    setQuestions(q);
+    const initializeQuiz = async () => {
+        setQuestions([]); // Clear previous questions while loading
+        const q = await generateQuiz(group.words);
+        setQuestions(q);
+    };
+    initializeQuiz();
   }, [group]);
 
   useEffect(() => {

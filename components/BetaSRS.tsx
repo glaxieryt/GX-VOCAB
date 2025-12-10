@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { allWords } from '../data';
 import { Word, SRSState, RichVocabularyCard } from '../types';
 import { generateRichVocabularyData, generateWordImage, speakText } from '../services/geminiService';
 import { saveSRSState, getSRSState, getCurrentSession, saveWordProgress } from '../services/authService';
@@ -15,17 +14,21 @@ interface BetaSRSProps {
 }
 
 const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
+    // Data State
+    const [allWords, setAllWords] = useState<Word[]>([]);
+    const [srsState, setSrsState] = useState<Record<string, SRSState>>({});
+    
     // Session State
     const [phase, setPhase] = useState<Phase>('DASHBOARD');
     const [queue, setQueue] = useState<Word[]>([]);
     const [queueIndex, setQueueIndex] = useState(0);
     const [currentCard, setCurrentCard] = useState<RichVocabularyCard | null>(null);
-    const [srsState, setSrsState] = useState<Record<string, SRSState>>({});
     const [user, setUser] = useState<string | null>(null);
     
     // Visual State
     const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [loadingImage, setLoadingImage] = useState(false);
+    const [loadingData, setLoadingData] = useState(true);
 
     // Exercise State
     const [currentExerciseIdx, setCurrentExerciseIdx] = useState(0);
@@ -38,15 +41,19 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
     const [sessionStats, setSessionStats] = useState({ correct: 0, total: 0 });
 
     const loadInitialState = async () => {
+        setLoadingData(true);
+        const dataModule = await import('../data');
+        setAllWords(dataModule.allWords);
+
         const session = await getCurrentSession();
         if (session) {
             setUser(session.username);
-            // This is the most important part: load the saved state.
             setSrsState(session.srs_state || {});
         } else {
             const localData = localStorage.getItem('gx_beta_srs');
             setSrsState(localData ? JSON.parse(localData) : {});
         }
+        setLoadingData(false);
     };
 
     useEffect(() => {
@@ -54,6 +61,8 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
     }, []);
 
     const startSession = () => {
+        if (allWords.length === 0) return;
+        
         const now = Date.now();
         const dueReviews = allWords.filter(w => {
             const state = srsState[w.id];
@@ -228,7 +237,13 @@ const BetaSRS: React.FC<BetaSRSProps> = ({ onExit, onEarnXP }) => {
     );
 
     if (phase === 'DASHBOARD') {
-        // FIX: Explicitly type `s` as SRSState to fix `s.interval` access error.
+        if (loadingData) {
+             return (
+                <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-6 flex flex-col items-center justify-center">
+                     <div className="w-8 h-8 border-4 border-zinc-200 border-t-black dark:border-zinc-800 dark:border-t-white rounded-full animate-spin"></div>
+                </div>
+            );
+        }
         const mastered = Object.values(srsState).filter((s: SRSState) => s.interval > 21).length;
         const due = allWords.filter(w => srsState[w.id] && srsState[w.id].nextReview <= Date.now()).length;
         return (
