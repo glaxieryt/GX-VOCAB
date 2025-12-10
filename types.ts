@@ -1,5 +1,4 @@
 
-
 // ... (previous imports)
 
 export interface Word {
@@ -27,6 +26,7 @@ export enum AppView {
   MISTAKES = 'MISTAKES',
   LEADERBOARD = 'LEADERBOARD',
   BETA_SRS = 'BETA_SRS',
+  MATH_MODE = 'MATH_MODE',
 }
 
 export enum QuizQuestionType {
@@ -69,47 +69,14 @@ export interface Lesson {
   queue: LearningQuestion[];
 }
 
-// --- Math Module Types ---
-export enum MathView {
-  DASHBOARD = 'DASHBOARD',
-  PRACTICE = 'PRACTICE',
-  NET_SEQUENCE_SERIES = 'NET_SEQUENCE_SERIES',
-}
-
-export enum MathTopic {
-  MULTIPLICATION = 'Multiplication',
-  POWERS = 'Powers',
-  ROOTS = 'Roots',
-  NET_MATHS = 'NET Maths'
-}
-
-export enum DifficultyLevel {
-  BEGINNER = 'Beginner',
-  INTERMEDIATE = 'Intermediate',
-  ADVANCED = 'Advanced',
-  EXPERT = 'Expert',
-}
-
-export interface MathProblem {
-  id: string;
-  question: string;
-  correctAnswer: number;
-  options: number[];
-  hint: string;
-  explanation: string;
-  difficulty: DifficultyLevel;
-}
+// --- Auth Types ---
 
 export interface MathStats {
   streak: number;
   solved: number;
   lastPlayed: number;
-  progress: {
-    [key in MathTopic]?: number;
-  };
+  progress: Record<string, number>; // Topic -> %
 }
-
-// --- Auth Types ---
 
 export interface UserProfile {
   username: string;
@@ -179,4 +146,39 @@ export interface RichVocabularyCard {
     context: string;
   }[];
   exercises: Exercise[];
+}
+
+// --- MATH PROFESSIONAL TYPES ---
+
+export enum MathView {
+  DASHBOARD = 'DASHBOARD',
+  LESSON = 'LESSON',
+  PRACTICE = 'PRACTICE',
+  RESULTS = 'RESULTS',
+  NET_SEQUENCE_SERIES = 'NET_SEQUENCE_SERIES'
+}
+
+export enum MathTopic {
+  MULTIPLICATION = 'MULTIPLICATION',
+  POWERS = 'POWERS',
+  ROOTS = 'ROOTS',
+  MIXED = 'MIXED',
+  NET_MATHS = 'NET_MATHS'
+}
+
+export enum DifficultyLevel {
+  BEGINNER = 'BEGINNER',
+  INTERMEDIATE = 'INTERMEDIATE',
+  ADVANCED = 'ADVANCED',
+  EXPERT = 'EXPERT'
+}
+
+export interface MathProblem {
+  id: string;
+  question: string;
+  correctAnswer: number;
+  options: number[]; // Distractors
+  hint: string;
+  explanation: string;
+  difficulty: DifficultyLevel;
 }

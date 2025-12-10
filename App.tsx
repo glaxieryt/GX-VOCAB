@@ -13,9 +13,11 @@ import AuthScreen from './components/AuthScreen';
 import ThemeToggle from './components/ThemeToggle';
 import { getEasyMeaning } from './services/geminiService';
 // import BetaSRS from './components/BetaSRS'; // Lazy loaded
+// import MathModule from './components/MathModule'; // Lazy loaded
 
 // --- Lazy Loaded Components ---
 const BetaSRS = lazy(() => import('./components/BetaSRS'));
+const MathModule = lazy(() => import('./components/MathModule'));
 const GuidedLearning = lazy(() => import('./components/GuidedLearning'));
 
 // --- Suspense Fallback Loader ---
@@ -305,13 +307,13 @@ const App: React.FC = () => {
   const renderSubjectSelection = () => (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-12 animate-fadeIn pb-12">
           <div className="text-center space-y-4 px-4 mb-4">
-              <h2 className="text-5xl md:text-7xl font-serif font-medium tracking-tight text-black dark:text-white animate-slideUp">Welcome</h2>
+              <h2 className="text-5xl md:text-7xl font-serif font-medium tracking-tight text-black dark:text-white animate-slideUp">Choose Your Path</h2>
               <p className="text-zinc-500 dark:text-zinc-400 max-w-md mx-auto text-lg font-light animate-slideUp" style={{ animationDelay: '0.1s' }}>
-                  The English Vocabulary module is ready for you.
+                  What would you like to master today?
               </p>
           </div>
 
-          <div className="w-full max-w-xl px-4 animate-slideUp" style={{ animationDelay: '0.2s' }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl px-4 animate-slideUp" style={{ animationDelay: '0.2s' }}>
               {/* ENGLISH CARD */}
               <div 
                   onClick={() => setView(AppView.HOME)}
@@ -319,13 +321,30 @@ const App: React.FC = () => {
               >
                   <div className="flex-1 flex flex-col items-center justify-center">
                       <span className="text-6xl mb-6 group-hover:scale-110 transition-transform duration-300 block">📚</span>
-                      <h3 className="text-4xl font-serif font-bold mb-3 text-black dark:text-white">English Vocabulary</h3>
+                      <h3 className="text-4xl font-serif font-bold mb-3 text-black dark:text-white">English</h3>
                       <p className="text-zinc-500 dark:text-zinc-400 max-w-xs">
                           Master 1500+ advanced vocabulary words with AI-powered guided learning.
                       </p>
                   </div>
                   <div className="w-full mt-4">
                       <Button fullWidth>Enter Class</Button>
+                  </div>
+              </div>
+
+              {/* MATHS CARD */}
+              <div 
+                  onClick={() => setView(AppView.MATH_MODE)}
+                  className="group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 shadow-lg hover:shadow-2xl transition-all hover:-translate-y-2 cursor-pointer flex flex-col items-center text-center h-80 justify-center relative overflow-hidden"
+              >
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                      <span className="text-6xl mb-6 group-hover:rotate-12 transition-transform duration-300 block">🧮</span>
+                      <h3 className="text-4xl font-serif font-bold mb-3 text-black dark:text-white">Maths</h3>
+                      <p className="text-zinc-500 dark:text-zinc-400 max-w-xs">
+                          Professional platform for mastering multiplication, powers, and roots.
+                      </p>
+                  </div>
+                  <div className="w-full mt-4">
+                      <Button fullWidth>Enter Dojo</Button>
                   </div>
               </div>
           </div>
@@ -686,8 +705,16 @@ const App: React.FC = () => {
           </Suspense>
       )}
 
+      {view === AppView.MATH_MODE && (
+          <Suspense fallback={<ModuleLoader />}>
+              <div className="fixed inset-0 z-40 overflow-y-auto bg-slate-50">
+                  <MathModule onExit={goSubjectSelection} onEarnXP={handleEarnXP} />
+              </div>
+          </Suspense>
+      )}
+
       {/* Ask AI Context Menu */}
-      {view !== AppView.SUBJECT_SELECTION && view !== AppView.BETA_SRS && aiPopupPosition && selectedText && (
+      {view !== AppView.SUBJECT_SELECTION && view !== AppView.MATH_MODE && view !== AppView.BETA_SRS && aiPopupPosition && selectedText && (
           <div 
              className="fixed bg-black dark:bg-white text-white dark:text-black rounded-lg shadow-2xl p-4 w-72 animate-popIn ask-ai-popup"
              style={{ 
