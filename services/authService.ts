@@ -1,4 +1,6 @@
 
+
+// FIX: Import MathStats type
 import { UserProfile, MathStats } from '../types';
 
 const USERS_KEY = 'gx_users_db';
@@ -38,7 +40,8 @@ const mapSupabaseUserToProfile = (user: any): UserProfile => ({
     xp: user.xp || 0,
     isPublic: user.is_public ?? true,
     srs_state: user.srs_state || {},
-    math_stats: user.math_stats || { streak: 0, solved: 0, lastPlayed: 0, progress: {} }
+    // FIX: Map math_stats from Supabase response
+    math_stats: user.math_stats || { streak: 0, solved: 0, lastPlayed: 0, progress: {} },
 });
 
 export const signUp = async (username: string, password: string, isPublic: boolean = true): Promise<UserProfile> => {
@@ -83,7 +86,7 @@ export const signUp = async (username: string, password: string, isPublic: boole
         username: cleanUser,
         learningIndex: 0, learnedWords: [], mistakes: {}, xp: 0, isPublic,
         srs_state: {},
-        math_stats: { streak: 0, solved: 0, lastPlayed: 0, progress: {} }
+        math_stats: { streak: 0, solved: 0, lastPlayed: 0, progress: {} },
     };
     db[cleanUser] = { ...newUserProfile, password };
     saveLocalDB(db);
@@ -220,6 +223,35 @@ export const getLeaderboard = async (): Promise<{username: string, score: number
     })).filter(u => u.score > 0).sort((a, b) => b.score - a.score).slice(0, 100);
 };
 
+// FIX: Add missing saveMathProgress function to save math stats and XP.
+export const saveMathProgress = async (username: string, stats: MathStats, addedXp: number) => {
+    if (hasSupabase) {
+        try {
+            const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=xp`, {
+                method: 'GET', headers: apiHeaders, cache: 'no-cache'
+            });
+            const data = await res.json();
+            const currentXp = data[0]?.xp || 0;
+            const payload = { math_stats: stats, xp: currentXp + addedXp };
+            await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
+                method: 'PATCH',
+                headers: apiHeaders,
+                body: JSON.stringify(payload),
+                cache: 'no-cache'
+            });
+        } catch (e) {
+            console.error("Failed to save math progress", e);
+        }
+    } else {
+        const db = getLocalDB();
+        if (db[username]) {
+            db[username].math_stats = stats;
+            db[username].xp = (db[username].xp || 0) + addedXp;
+            saveLocalDB(db);
+        }
+    }
+};
+
 export const saveSRSState = async (username: string, srsState: Record<string, any>, addedXp: number = 0) => {
     if (!hasSupabase) {
         const db = getLocalDB();
@@ -254,31 +286,6 @@ export const getSRSState = async (username: string): Promise<Record<string, any>
         return data[0]?.srs_state || {};
     }
     return getLocalDB()[username]?.srs_state || {};
-};
-
-export const saveMathProgress = async (username: string, stats: MathStats, addedXp: number = 0) => {
-    if (!hasSupabase) {
-        const db = getLocalDB();
-        if(db[username]) {
-            db[username].math_stats = stats;
-            db[username].xp = (db[username].xp || 0) + addedXp;
-            saveLocalDB(db);
-        }
-        return;
-    }
-    try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}&select=xp`, {
-            method: 'GET', headers: apiHeaders, cache: 'no-cache'
-        });
-        const data = await res.json();
-        const currentXp = data[0]?.xp || 0;
-        await fetch(`${SUPABASE_URL}/rest/v1/users?username=eq.${username}`, {
-            method: 'PATCH',
-            headers: apiHeaders,
-            body: JSON.stringify({ math_stats: stats, xp: currentXp + addedXp }),
-            cache: 'no-cache'
-        });
-    } catch (e) { console.error("Math Sync failed", e); }
 };
 
 export const saveWordProgress = async (
