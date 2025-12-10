@@ -1,19 +1,33 @@
 
+
 // ... existing imports ...
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
 import { WordGroup, AppView, UserProfile } from './types';
 import { getGroupedData, allWords } from './data';
 import { getCurrentSession, saveUserProgress, signOut, recordMistake, getLeaderboard } from './services/authService';
 import Button from './components/Button';
 import WordCard from './components/WordCard';
 import Quiz from './components/Quiz';
-import GuidedLearning from './components/GuidedLearning';
+// import GuidedLearning from './components/GuidedLearning'; // Lazy loaded
 import Logo from './components/Logo';
 import AuthScreen from './components/AuthScreen';
 import ThemeToggle from './components/ThemeToggle';
 import { getEasyMeaning } from './services/geminiService';
-import BetaSRS from './components/BetaSRS';
-import MathModule from './components/MathModule';
+// import BetaSRS from './components/BetaSRS'; // Lazy loaded
+// import MathModule from './components/MathModule'; // Lazy loaded
+
+// --- Lazy Loaded Components ---
+const BetaSRS = lazy(() => import('./components/BetaSRS'));
+const MathModule = lazy(() => import('./components/MathModule'));
+const GuidedLearning = lazy(() => import('./components/GuidedLearning'));
+
+// --- Suspense Fallback Loader ---
+const ModuleLoader = () => (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm">
+        <div className="w-12 h-12 border-4 border-zinc-200 dark:border-zinc-800 border-t-black dark:border-t-white rounded-full animate-spin"></div>
+    </div>
+);
+
 
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -643,13 +657,15 @@ const App: React.FC = () => {
           {view === AppView.MISTAKES && <div></div>}
           {view === AppView.LEADERBOARD && renderLeaderboard()}
           {view === AppView.GUIDED_LEARNING && (
-             <GuidedLearning 
-                initialIndex={learningIndex} 
-                learnedWordsIds={learnedWords}
-                onWordComplete={handleWordComplete}
-                onMistake={handleMistake}
-                onExit={goHome}
-             />
+             <Suspense fallback={<ModuleLoader />}>
+                <GuidedLearning 
+                    initialIndex={learningIndex} 
+                    learnedWordsIds={learnedWords}
+                    onWordComplete={handleWordComplete}
+                    onMistake={handleMistake}
+                    onExit={goHome}
+                />
+             </Suspense>
           )}
           
           {/* SPECIAL FULL-SCREEN MODES */}
@@ -659,15 +675,19 @@ const App: React.FC = () => {
 
       {/* Beta & Math Modules take over the screen but we still render them here to share context */}
       {view === AppView.BETA_SRS && (
-          <div className="fixed inset-0 z-40 overflow-y-auto bg-zinc-50 dark:bg-zinc-950">
-              <BetaSRS onExit={goHome} onEarnXP={handleEarnXP} />
-          </div>
+          <Suspense fallback={<ModuleLoader />}>
+              <div className="fixed inset-0 z-40 overflow-y-auto bg-zinc-50 dark:bg-zinc-950">
+                  <BetaSRS onExit={goHome} onEarnXP={handleEarnXP} />
+              </div>
+          </Suspense>
       )}
 
       {view === AppView.MATH_MODE && (
-          <div className="fixed inset-0 z-40 overflow-y-auto bg-slate-50">
-              <MathModule onExit={goSubjectSelection} onEarnXP={handleEarnXP} />
-          </div>
+          <Suspense fallback={<ModuleLoader />}>
+              <div className="fixed inset-0 z-40 overflow-y-auto bg-slate-50">
+                  <MathModule onExit={goSubjectSelection} onEarnXP={handleEarnXP} />
+              </div>
+          </Suspense>
       )}
 
       {/* Ask AI Context Menu */}
